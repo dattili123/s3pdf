@@ -1,26 +1,30 @@
 import boto3
 from botocore.exceptions import NoCredentialsError, PartialCredentialsError
 
-def check_bedrock_connectivity(region="us-east-1"):
+def check_bedrock_connectivity(region="us-east-1", model_id="amazon.titan-text-v1"):
     """
-    Check connectivity to the AWS Bedrock Runtime service.
+    Check connectivity to the AWS Bedrock Runtime service by invoking a dummy prompt.
 
     Args:
         region (str): The AWS region to use for the Bedrock service.
+        model_id (str): The AWS Bedrock model ID to test.
 
     Returns:
         None
     """
     try:
-        # Create a Bedrock client
+        # Create a Bedrock Runtime client
         client = boto3.client("bedrock-runtime", region_name=region)
         
-        # List available models (a harmless API call to test connectivity)
-        response = client.list_models()
+        # Send a basic test request
+        response = client.invoke_model(
+            modelId=model_id,
+            body='{"input": "Test connectivity to AWS Bedrock."}',
+            contentType="application/json",
+        )
         print("Successfully connected to AWS Bedrock!")
-        print("Available Models:")
-        for model in response.get("models", []):
-            print(f"- Model ID: {model.get('modelId')}")
+        print("Response:")
+        print(response)
     except NoCredentialsError:
         print("AWS credentials not found. Please configure your credentials.")
     except PartialCredentialsError:
