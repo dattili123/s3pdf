@@ -1,162 +1,144 @@
 import os
 import boto3
 import json
-import logging
-from PyPDF2 import PdfReader
-import re
-
-# Set up the logger
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(levelname)s - %(message)s",
-    handlers=[
-        logging.StreamHandler(),  # Logs to the console
-    ]
-)
-logger = logging.getLogger(__name__)
+from PyPDF2 import PdfReader, PdfWriter
 
 
-def split_pdf_logically(pdf_path, output_dir):
+def split_pdf_by_size(input_pdf_path, output_dir, size_limit_mb=1):
     """
-    Splits a PDF document logically into sections and saves them as text files.
+    Splits a PDF file into smaller PDFs, each approximately `size_limit_mb` in size.
 
     Args:
-        pdf_path (str): Path to the input PDF file.
-        output_dir (str): Directory where split parts will be saved.
+        input_pdf_path (str): Path to the input PDF file.
+        output_dir (str): Directory where split PDFs will be saved.
+        size_limit_mb (int): Maximum size of each split PDF in megabytes.
     """
     os.makedirs(output_dir, exist_ok=True)
-    reader = PdfReader(pdf_path)
-    sections = {"Introduction": []}
-    current_section = "Introduction"
+    reader = PdfReader(input_pdf_path)
+    writer = PdfWriter()
+    current_size = 0
+    part_number = 1
 
-    for page_num, page in enumerate(reader.pages):
-        text = page.extract_text()
-        if not text:
-            continue
+    for page in reader.pages:
+        writer.add_page(page)
+        # Estimate the size of the current PDF part
+        current_size += len(page.extract_text().encode("utf-8")) / (1024 * 1024)  # Convert to MB
 
-        lines = text.split("\n")
-        for line in lines:
-            if re.match(r"^\d+\.", line.strip()):  # Detect headings like "1.", "2."
-                current_section = line.strip()
-                if current_section not in sections:
-                    sections[current_section] = []
-            else:
-                sections[current_section].append(line)
+        if current_size >= size_limit_mb:
+            # Save the current part
+            output_path = os.path.join(output_dir, f"part_{part_number}.pdf")
+            with open(output_path, "wb") as output_file:
+                writer.write(output_file)
+            print(f"Saved: {output_path}")
+            writer = PdfWriter()  # Reset the writer for the next part
+            current_size = 0
+            part_number += 1
 
-    for section, content in sections.items():
-        sanitized_name = re.sub(r'[^\w\-_\. ]', '_', section)
-        filename = os.path.join(output_dir, f"{sanitized_name}.txt")
-        with open(filename, "w", encoding="utf-8") as f:
-            f.write("\n".join(content))
+    # Save any remaining pages
+    if len(writer.pages) > 0:
+        output_path = os.path.join(output_dir, f"part_{part_number}.pdf")
+        with open(output_path, "wb") as output_file:
+            writer.write(output_file)
+        print(f"Saved: {output_path}")
 
-    logger.info(f"PDF split into {len(sections)} sections. Files saved in {output_dir}")
+    print(f"PDF split into {part_number} parts and saved in {output_dir}.")
 
 
-def find_relevant_section(question, split_files_dir):
+def find_relevant_pdf(question, split_files_dir):
     """
-    Finds the most relevant section for a question using basic keyword matching.
+    Finds the most relevant PDF part for a question using basic keyword matching.
 
     Args:
         question (str): The user's question.
-        split_files_dir (str): Directory of split text files.
+        split_files_dir (str): Directory containing split PDF files.
 
     Returns:
-        str: The most relevant section content.
+        str: Path to the most relevant PDF part.
     """
     max_score = -1
-    relevant_content = ""
+    relevant_pdf = ""
 
     for file_name in os.listdir(split_files_dir):
         file_path = os.path.join(split_files_dir, file_name)
 
-        if os.path.isdir(file_path):
+        if not file_name.endswith(".pdf"):
             continue
 
-        with open(file_path, "r", encoding="utf-8") as f:
-            content = f.read()
+        reader = PdfReader(file_path)
+        content = " ".join([page.extract_text() for page in reader.pages])
 
         # Basic keyword matching for relevance
         score = sum(1 for word in question.split() if word.lower() in content.lower())
         if score > max_score:
             max_score = score
-            relevant_content = content
+            relevant_pdf = file_path
 
-    logger.info(f"Most relevant section identified for question: '{question}'")
-    return relevant_content
+    print(f"Most relevant PDF part: {relevant_pdf}")
+    return relevant_pdf
 
 
-def generate_answer_with_bedrock(prompt, model_id="amazon.titan-text-v1"):
+def generate_answer_with_bedrock(prompt, model_id, region="us-east-1"):
     """
     Use AWS Bedrock to generate an answer using the prompt.
 
     Args:
         prompt (str): Context and question as the prompt.
         model_id (str): AWS Bedrock model ID.
+        region (str): AWS region for Bedrock service.
 
     Returns:
         str: The generated response from the model.
     """
-    logger.info("Invoking AWS Bedrock model...")
-    client = boto3.client("bedrock-runtime")
+    client = boto3.client("bedrock-runtime", region_name=region)
     try:
-        # Log the prompt being sent
-        logger.debug(f"Prompt: {prompt}")
-
         response = client.invoke_model(
             modelId=model_id,
             body=json.dumps({"input": prompt}),
             contentType="application/json",
         )
-
-        # Log the raw response from Bedrock
-        logger.debug(f"Raw Response: {response}")
-
-        # Parse and return the generated text
-        generated_text = json.loads(response["body"].read().decode("utf-8"))["generated_text"]
-        logger.info("Answer successfully generated by AWS Bedrock.")
-        return generated_text
+        return json.loads(response["body"].read().decode("utf-8"))["generated_text"]
     except Exception as e:
-        logger.error(f"Error invoking AWS Bedrock: {e}")
-        raise
+        print(f"Error invoking AWS Bedrock: {e}")
+        return "Error generating response."
 
 
-
-def chatbot_response(question, split_files_dir, model_id="amazon.titan-text-v1"):
+def chatbot_response(question, split_files_dir, model_id, region="us-east-1"):
     """
     Generate a chatbot response using AWS Bedrock LLM.
 
     Args:
         question (str): The user's query.
-        split_files_dir (str): Directory containing split files.
+        split_files_dir (str): Directory containing split PDF files.
         model_id (str): AWS Bedrock model ID.
+        region (str): AWS region for Bedrock service.
 
     Returns:
         str: The chatbot response.
     """
-    # Find the most relevant section
-    relevant_content = find_relevant_section(question, split_files_dir)
+    relevant_pdf_path = find_relevant_pdf(question, split_files_dir)
+
+    # Read the relevant PDF content
+    reader = PdfReader(relevant_pdf_path)
+    content = " ".join([page.extract_text() for page in reader.pages])
 
     # Create the prompt with context
-    prompt = f"Context:\n{relevant_content}\n\nQuestion:\n{question}\nAnswer:"
-    return generate_answer_with_bedrock(prompt, model_id)
+    prompt = f"Context:\n{content}\n\nQuestion:\n{question}\nAnswer:"
+    return generate_answer_with_bedrock(prompt, model_id, region)
 
 
 # Example Usage
 if __name__ == "__main__":
     # Paths
-    pdf_path = "/mnt/data/your_document.pdf"  # Replace with your PDF path
-    split_files_dir = "/mnt/data/split_sections"
+    input_pdf_path = "/mnt/data/your_document.pdf"  # Replace with your PDF path
+    split_files_dir = "/mnt/data/split_pdfs"
+    bedrock_model_id = "amazon.titan-text-v1"  # Replace with your Bedrock model ID
+    aws_region = "us-east-1"
 
-    # Step 1: Split the PDF into sections
-    try:
-        split_pdf_logically(pdf_path, split_files_dir)
-    except Exception as e:
-        logger.error(f"Failed to split PDF: {e}")
+    # Step 1: Split the PDF into parts
+    split_pdf_by_size(input_pdf_path, split_files_dir, size_limit_mb=1)
 
     # Step 2: Generate a response using AWS Bedrock
     question = "What are the main features of Amazon S3?"
-    try:
-        response = chatbot_response(question, split_files_dir)
-        logger.info(f"Chatbot Response: {response}")
-    except Exception as e:
-        logger.error(f"Failed to generate chatbot response: {e}")
+    response = chatbot_response(question, split_files_dir, bedrock_model_id, aws_region)
+    print("Chatbot Response:")
+    print(response)
