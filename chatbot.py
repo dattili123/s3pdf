@@ -1,6 +1,19 @@
 import os
 import boto3
 import json
+import logging
+from PyPDF2 import PdfReader
+import re
+
+# Set up the logger
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(levelname)s - %(message)s",
+    handlers=[
+        logging.StreamHandler(),  # Logs to the console
+    ]
+)
+logger = logging.getLogger(__name__)
 
 
 def split_pdf_logically(pdf_path, output_dir):
@@ -11,9 +24,6 @@ def split_pdf_logically(pdf_path, output_dir):
         pdf_path (str): Path to the input PDF file.
         output_dir (str): Directory where split parts will be saved.
     """
-    from PyPDF2 import PdfReader
-    import re
-
     os.makedirs(output_dir, exist_ok=True)
     reader = PdfReader(pdf_path)
     sections = {"Introduction": []}
@@ -39,7 +49,7 @@ def split_pdf_logically(pdf_path, output_dir):
         with open(filename, "w", encoding="utf-8") as f:
             f.write("\n".join(content))
 
-    print(f"PDF split into {len(sections)} sections. Files saved in {output_dir}")
+    logger.info(f"PDF split into {len(sections)} sections. Files saved in {output_dir}")
 
 
 def find_relevant_section(question, split_files_dir):
@@ -71,6 +81,7 @@ def find_relevant_section(question, split_files_dir):
             max_score = score
             relevant_content = content
 
+    logger.info(f"Most relevant section identified for question: '{question}'")
     return relevant_content
 
 
@@ -91,6 +102,7 @@ def generate_answer_with_bedrock(prompt, model_id="amazon.titan-text-v1"):
         body=json.dumps({"input": prompt}),
         contentType="application/json",
     )
+    logger.info(f"Answer generated successfully for the provided prompt.")
     return json.loads(response["body"].read().decode("utf-8"))["generated_text"]
 
 
@@ -121,10 +133,15 @@ if __name__ == "__main__":
     split_files_dir = "/mnt/data/split_sections"
 
     # Step 1: Split the PDF into sections
-    split_pdf_logically(pdf_path, split_files_dir)
+    try:
+        split_pdf_logically(pdf_path, split_files_dir)
+    except Exception as e:
+        logger.error(f"Failed to split PDF: {e}")
 
     # Step 2: Generate a response using AWS Bedrock
     question = "What are the main features of Amazon S3?"
-    response = chatbot_response(question, split_files_dir)
-    print("Chatbot Response:")
-    print(response)
+    try:
+        response = chatbot_response(question, split_files_dir)
+        logger.info(f"Chatbot Response: {response}")
+    except Exception as e:
+        logger.error(f"Failed to generate chatbot response: {e}")
