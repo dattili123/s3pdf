@@ -80,30 +80,38 @@ def train_embedding_model(split_files_dir, embedding_size=128, model_path="embed
     texts = []
     for file_name in os.listdir(split_files_dir):
         file_path = os.path.join(split_files_dir, file_name)
-        
+
         # Skip directories
         if os.path.isdir(file_path):
             continue
-        
+
         with open(file_path, 'r', encoding='utf-8') as f:
             texts.append(f.read())
-    
+
     # Standard Tokenizer
     tokenizer = Tokenizer()
     tokenizer.fit_on_texts(texts)
     sequences = tokenizer.texts_to_sequences(texts)
-    padded_sequences = pad_sequences(sequences, padding='post')
+    padded_sequences = pad_sequences(sequences, padding="post")
 
     # Define a simple embedding model
     model = tf.keras.Sequential([
-        tf.keras.layers.Embedding(input_dim=len(tokenizer.word_index) + 1,
-                                   output_dim=embedding_size, input_length=padded_sequences.shape[1]),
+        tf.keras.layers.Embedding(
+            input_dim=len(tokenizer.word_index) + 1,
+            output_dim=embedding_size,
+            input_length=padded_sequences.shape[1]
+        ),
         tf.keras.layers.Flatten()
     ])
-    model.compile(optimizer='adam', loss='mse')
+    model.compile(optimizer="adam", loss="mse")
 
     # Train model
-    model.fit(padded_sequences, np.zeros((len(padded_sequences),)), epochs=5, batch_size=2)
+    model.fit(
+        padded_sequences,
+        np.zeros((len(padded_sequences),)),
+        epochs=5,
+        batch_size=2
+    )
 
     # Save the model
     model.save(model_path)
