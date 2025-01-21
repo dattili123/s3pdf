@@ -1,26 +1,6 @@
 import os
 import boto3
 import json
-import numpy as np
-import tensorflow as tf
-import sentencepiece as spm
-from PyPDF2 import PdfReader
-from tqdm import tqdm
-from tensorflow.keras.preprocessing.text import Tokenizer
-from tensorflow.keras.preprocessing.sequence import pad_sequences
-
-# Use these standard functions for tokenization and padding
-tokenizer = Tokenizer()
-tokenizer.fit_on_texts(texts)
-sequences = tokenizer.texts_to_sequences(texts)
-padded_sequences = pad_sequences(sequences, padding='post')
-
-
-def sanitize_filename(name):
-    """
-    Sanitize a string to make it safe for use as a filename.
-    """
-    return re.sub(r'[^\w\-_\. ]', '_', name)
 
 
 def split_pdf_logically(pdf_path, output_dir):
@@ -29,188 +9,122 @@ def split_pdf_logically(pdf_path, output_dir):
 
     Args:
         pdf_path (str): Path to the input PDF file.
-        output_dir (str): Directory where the split parts will be saved.
+        output_dir (str): Directory where split parts will be saved.
     """
+    from PyPDF2 import PdfReader
+    import re
+
     os.makedirs(output_dir, exist_ok=True)
     reader = PdfReader(pdf_path)
-    sections = {"Introduction": []}  # Default section
+    sections = {"Introduction": []}
     current_section = "Introduction"
 
     for page_num, page in enumerate(reader.pages):
         text = page.extract_text()
         if not text:
-            continue  # Skip pages without text
+            continue
 
-        lines = text.split('\n')
+        lines = text.split("\n")
         for line in lines:
-            # Detect headings (lines starting with "1.", "2.", etc.)
-            if line.strip().isdigit() or line.strip().startswith(('1.', '2.', '3.')):
-                current_section = sanitize_filename(line.strip())  # Update the current section safely
+            if re.match(r"^\d+\.", line.strip()):  # Detect headings like "1.", "2."
+                current_section = line.strip()
                 if current_section not in sections:
                     sections[current_section] = []
             else:
                 sections[current_section].append(line)
 
-    # Write each section to a separate file
     for section, content in sections.items():
-        filename = os.path.join(output_dir, f"{sanitize_filename(section)}.txt")
-        with open(filename, 'w', encoding='utf-8') as f:
+        sanitized_name = re.sub(r'[^\w\-_\. ]', '_', section)
+        filename = os.path.join(output_dir, f"{sanitized_name}.txt")
+        with open(filename, "w", encoding="utf-8") as f:
             f.write("\n".join(content))
 
     print(f"PDF split into {len(sections)} sections. Files saved in {output_dir}")
 
 
-
-import os
-import tensorflow as tf
-from tensorflow.keras.preprocessing.text import Tokenizer
-from tensorflow.keras.preprocessing.sequence import pad_sequences
-import numpy as np
-
-
-def train_embedding_model(split_files_dir, embedding_size=128, model_path="embedding_model.h5"):
+def find_relevant_section(question, split_files_dir):
     """
-    Train a TensorFlow-based embedding model on split files.
+    Finds the most relevant section for a question using basic keyword matching.
 
     Args:
-        split_files_dir (str): Directory of split files.
-        embedding_size (int): Size of the embeddings.
-        model_path (str): Path to save the trained model.
-    """
-    texts = []
-    for file_name in os.listdir(split_files_dir):
-        file_path = os.path.join(split_files_dir, file_name)
-
-        # Skip directories
-        if os.path.isdir(file_path):
-            continue
-
-        with open(file_path, 'r', encoding='utf-8') as f:
-            texts.append(f.read())
-
-    # Standard Tokenizer
-    tokenizer = Tokenizer()
-    tokenizer.fit_on_texts(texts)
-    sequences = tokenizer.texts_to_sequences(texts)
-    padded_sequences = pad_sequences(sequences, padding="post")
-
-    # Define a simple embedding model
-    model = tf.keras.Sequential([
-        tf.keras.layers.Embedding(
-            input_dim=len(tokenizer.word_index) + 1,
-            output_dim=embedding_size,
-            input_length=padded_sequences.shape[1]
-        ),
-        tf.keras.layers.Flatten()
-    ])
-    model.compile(optimizer="adam", loss="mse")
-
-    # Train model
-    model.fit(
-        padded_sequences,
-        np.zeros((len(padded_sequences),)),
-        epochs=5,
-        batch_size=2
-    )
-
-    # Save the model
-    model.save(model_path)
-    print(f"Model saved successfully at {model_path}")
-    return model, tokenizer
-
-
-
-
-def find_relevant_section(question, split_files_dir, model, tokenizer):
-    """
-    Finds the most relevant section for a question using embeddings.
-
-    Args:
-        question (str): User query.
+        question (str): The user's question.
         split_files_dir (str): Directory of split text files.
-        model: Trained TensorFlow embedding model.
-        tokenizer: Tokenizer used for embedding generation.
 
     Returns:
-        str: Content of the most relevant section.
+        str: The most relevant section content.
     """
-    question_sequence = tokenizer.texts_to_sequences([question])
-    question_embedding = model(tf.keras.preprocessing.sequence.pad_sequences(
-        question_sequence, maxlen=model.input_shape[1], padding="post"))
-
-    max_similarity = -1
+    max_score = -1
     relevant_content = ""
 
     for file_name in os.listdir(split_files_dir):
         file_path = os.path.join(split_files_dir, file_name)
-        with open(file_path, 'r', encoding='utf-8') as f:
+
+        if os.path.isdir(file_path):
+            continue
+
+        with open(file_path, "r", encoding="utf-8") as f:
             content = f.read()
-        content_sequence = tokenizer.texts_to_sequences([content])
-        content_embedding = model(tf.keras.preprocessing.sequence.pad_sequences(
-            content_sequence, maxlen=model.input_shape[1], padding="post"))
-        
-        # Calculate cosine similarity
-        similarity = np.dot(question_embedding, content_embedding.T) / (
-            np.linalg.norm(question_embedding) * np.linalg.norm(content_embedding))
-        if similarity > max_similarity:
-            max_similarity = similarity
+
+        # Basic keyword matching for relevance
+        score = sum(1 for word in question.split() if word.lower() in content.lower())
+        if score > max_score:
+            max_score = score
             relevant_content = content
 
     return relevant_content
 
 
-def generate_answer_with_bedrock(prompt, model_id):
+def generate_answer_with_bedrock(prompt, model_id="amazon.titan-text-v1"):
     """
-    Use AWS Bedrock to generate an answer using the provided prompt.
+    Use AWS Bedrock to generate an answer using the prompt.
 
     Args:
-        prompt (str): Context and question for the model.
+        prompt (str): Context and question as the prompt.
         model_id (str): AWS Bedrock model ID.
 
     Returns:
-        str: Generated answer.
+        str: The generated response from the model.
     """
-    client = boto3.client('bedrock-runtime')
+    client = boto3.client("bedrock-runtime")
     response = client.invoke_model(
         modelId=model_id,
         body=json.dumps({"input": prompt}),
-        contentType='application/json'
+        contentType="application/json",
     )
-    return json.loads(response['body'].read().decode('utf-8'))['generated_text']
+    return json.loads(response["body"].read().decode("utf-8"))["generated_text"]
 
 
-def chatbot_response(question, split_files_dir, model, tokenizer, model_id):
+def chatbot_response(question, split_files_dir, model_id="amazon.titan-text-v1"):
     """
-    Generate chatbot response for a user question.
+    Generate a chatbot response using AWS Bedrock LLM.
 
     Args:
-        question (str): User query.
-        split_files_dir (str): Directory of split files.
-        model: Trained TensorFlow embedding model.
-        tokenizer: Tokenizer used for embedding generation.
+        question (str): The user's query.
+        split_files_dir (str): Directory containing split files.
         model_id (str): AWS Bedrock model ID.
 
     Returns:
-        str: Chatbot response.
+        str: The chatbot response.
     """
-    relevant_content = find_relevant_section(question, split_files_dir, model, tokenizer)
+    # Find the most relevant section
+    relevant_content = find_relevant_section(question, split_files_dir)
+
+    # Create the prompt with context
     prompt = f"Context:\n{relevant_content}\n\nQuestion:\n{question}\nAnswer:"
     return generate_answer_with_bedrock(prompt, model_id)
 
 
 # Example Usage
 if __name__ == "__main__":
-    pdf_path = "/mnt/data/your_document.pdf"
+    # Paths
+    pdf_path = "/mnt/data/your_document.pdf"  # Replace with your PDF path
     split_files_dir = "/mnt/data/split_sections"
-    model_id = "amazon.titan-text-v1"
-    model_path = "embedding_model"
 
-    # Step 1: Split the PDF
+    # Step 1: Split the PDF into sections
     split_pdf_logically(pdf_path, split_files_dir)
 
-    # Step 2: Train an embedding model
-    model, tokenizer = train_embedding_model(split_files_dir, model_path=model_path)
-
-    # Step 3: Generate chatbot response
+    # Step 2: Generate a response using AWS Bedrock
     question = "What are the main features of Amazon S3?"
-    print(chatbot_response(question, split_files_dir, model, tokenizer, model_id))
+    response = chatbot_response(question, split_files_dir)
+    print("Chatbot Response:")
+    print(response)
