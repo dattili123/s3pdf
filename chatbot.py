@@ -8,37 +8,49 @@ from PyPDF2 import PdfReader
 from tqdm import tqdm
 
 
+def sanitize_filename(name):
+    """
+    Sanitize a string to make it safe for use as a filename.
+    """
+    return re.sub(r'[^\w\-_\. ]', '_', name)
+
+
 def split_pdf_logically(pdf_path, output_dir):
     """
-    Splits a PDF document into logical sections and saves them to local files.
+    Splits a PDF document logically into sections and saves them as text files.
 
     Args:
         pdf_path (str): Path to the input PDF file.
-        output_dir (str): Directory to save split sections.
+        output_dir (str): Directory where the split parts will be saved.
     """
     os.makedirs(output_dir, exist_ok=True)
     reader = PdfReader(pdf_path)
-    sections = {"Introduction": []}
+    sections = {"Introduction": []}  # Default section
     current_section = "Introduction"
 
     for page_num, page in enumerate(reader.pages):
         text = page.extract_text()
+        if not text:
+            continue  # Skip pages without text
+
         lines = text.split('\n')
-        
         for line in lines:
+            # Detect headings (lines starting with "1.", "2.", etc.)
             if line.strip().isdigit() or line.strip().startswith(('1.', '2.', '3.')):
-                current_section = line.strip()
+                current_section = sanitize_filename(line.strip())  # Update the current section safely
                 if current_section not in sections:
                     sections[current_section] = []
             else:
                 sections[current_section].append(line)
-    
+
+    # Write each section to a separate file
     for section, content in sections.items():
-        filename = os.path.join(output_dir, f"{section.replace(' ', '_')}.txt")
+        filename = os.path.join(output_dir, f"{sanitize_filename(section)}.txt")
         with open(filename, 'w', encoding='utf-8') as f:
             f.write("\n".join(content))
 
     print(f"PDF split into {len(sections)} sections. Files saved in {output_dir}")
+
 
 
 def train_embedding_model(split_files_dir, embedding_size=128, model_path="embedding_model"):
