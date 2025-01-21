@@ -61,23 +61,40 @@ def split_pdf_logically(pdf_path, output_dir):
 
 
 
+import os
+import tensorflow as tf
+from tensorflow.keras.preprocessing.text import Tokenizer
+from tensorflow.keras.preprocessing.sequence import pad_sequences
+import numpy as np
+
+
 def train_embedding_model(split_files_dir, embedding_size=128, model_path="embedding_model.h5"):
+    """
+    Train a TensorFlow-based embedding model on split files.
+
+    Args:
+        split_files_dir (str): Directory of split files.
+        embedding_size (int): Size of the embeddings.
+        model_path (str): Path to save the trained model.
+    """
     texts = []
     for file_name in os.listdir(split_files_dir):
         file_path = os.path.join(split_files_dir, file_name)
         
+        # Skip directories
         if os.path.isdir(file_path):
             continue
         
         with open(file_path, 'r', encoding='utf-8') as f:
             texts.append(f.read())
     
-    tokenizer = tf.keras.preprocessing.text.Tokenizer()
+    # Standard Tokenizer
+    tokenizer = Tokenizer()
     tokenizer.fit_on_texts(texts)
     sequences = tokenizer.texts_to_sequences(texts)
-    padded_sequences = tf.keras.preprocessing.sequence.pad_sequences(sequences, padding="post")
+    padded_sequences = pad_sequences(sequences, padding='post')
 
-    # Simple embedding model
+    # Define a simple embedding model
     model = tf.keras.Sequential([
         tf.keras.layers.Embedding(input_dim=len(tokenizer.word_index) + 1,
                                    output_dim=embedding_size, input_length=padded_sequences.shape[1]),
@@ -92,6 +109,7 @@ def train_embedding_model(split_files_dir, embedding_size=128, model_path="embed
     model.save(model_path)
     print(f"Model saved successfully at {model_path}")
     return model, tokenizer
+
 
 
 
