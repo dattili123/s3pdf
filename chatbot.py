@@ -65,6 +65,11 @@ def train_embedding_model(split_files_dir, embedding_size=128, model_path="embed
     texts = []
     for file_name in os.listdir(split_files_dir):
         file_path = os.path.join(split_files_dir, file_name)
+        
+        # Skip directories
+        if os.path.isdir(file_path):
+            continue
+        
         with open(file_path, 'r', encoding='utf-8') as f:
             texts.append(f.read())
     
@@ -84,7 +89,9 @@ def train_embedding_model(split_files_dir, embedding_size=128, model_path="embed
 
     # Train model (dummy labels for unsupervised embeddings)
     model.fit(padded_sequences, np.zeros((len(padded_sequences), embedding_size)), epochs=5, batch_size=2)
-    model.save(model_path)
+
+    # Save the model with `tf.saved_model.save` for compatibility
+    tf.saved_model.save(model, model_path)
     print(f"Embedding model trained and saved at {model_path}")
     return model, tokenizer
 
