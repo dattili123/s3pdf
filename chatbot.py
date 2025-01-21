@@ -6,6 +6,14 @@ import tensorflow as tf
 import sentencepiece as spm
 from PyPDF2 import PdfReader
 from tqdm import tqdm
+from tensorflow.keras.preprocessing.text import Tokenizer
+from tensorflow.keras.preprocessing.sequence import pad_sequences
+
+# Use these standard functions for tokenization and padding
+tokenizer = Tokenizer()
+tokenizer.fit_on_texts(texts)
+sequences = tokenizer.texts_to_sequences(texts)
+padded_sequences = pad_sequences(sequences, padding='post')
 
 
 def sanitize_filename(name):
@@ -53,47 +61,38 @@ def split_pdf_logically(pdf_path, output_dir):
 
 
 
-def train_embedding_model(split_files_dir, embedding_size=128, model_path="embedding_model"):
-    """
-    Train a TensorFlow-based embedding model on split files.
-
-    Args:
-        split_files_dir (str): Directory of split files.
-        embedding_size (int): Size of the embeddings.
-        model_path (str): Path to save the trained model.
-    """
+def train_embedding_model(split_files_dir, embedding_size=128, model_path="embedding_model.h5"):
     texts = []
     for file_name in os.listdir(split_files_dir):
         file_path = os.path.join(split_files_dir, file_name)
         
-        # Skip directories
         if os.path.isdir(file_path):
             continue
         
         with open(file_path, 'r', encoding='utf-8') as f:
             texts.append(f.read())
     
-    # Simple text preprocessing
     tokenizer = tf.keras.preprocessing.text.Tokenizer()
     tokenizer.fit_on_texts(texts)
     sequences = tokenizer.texts_to_sequences(texts)
     padded_sequences = tf.keras.preprocessing.sequence.pad_sequences(sequences, padding="post")
 
-    # Define a simple embedding model
+    # Simple embedding model
     model = tf.keras.Sequential([
         tf.keras.layers.Embedding(input_dim=len(tokenizer.word_index) + 1,
                                    output_dim=embedding_size, input_length=padded_sequences.shape[1]),
-        tf.keras.layers.GlobalAveragePooling1D()
+        tf.keras.layers.Flatten()
     ])
     model.compile(optimizer='adam', loss='mse')
 
-    # Train model (dummy labels for unsupervised embeddings)
-    model.fit(padded_sequences, np.zeros((len(padded_sequences), embedding_size)), epochs=5, batch_size=2)
+    # Train model
+    model.fit(padded_sequences, np.zeros((len(padded_sequences),)), epochs=5, batch_size=2)
 
-    # Save the model with `tf.saved_model.save` for compatibility
-    tf.saved_model.save(model, model_path)
-    print(f"Embedding model trained and saved at {model_path}")
+    # Save the model
+    model.save(model_path)
+    print(f"Model saved successfully at {model_path}")
     return model, tokenizer
+
 
 
 def find_relevant_section(question, split_files_dir, model, tokenizer):
