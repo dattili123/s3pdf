@@ -61,8 +61,8 @@ def generate_answer_with_bedrock(prompt, model_id, region="us-east-1"):
     """
     client = boto3.client("bedrock-runtime", region_name=region)
     try:
-        print("Sending Request to Bedrock:")
-        print(json.dumps({"modelId": model_id, "prompt": prompt}, indent=2))
+        #print("Sending Request to Bedrock:")
+        #print(json.dumps({"modelId": model_id, "prompt": prompt}, indent=2))
 
         response = client.invoke_model(
             modelId=model_id,
@@ -77,8 +77,8 @@ def generate_answer_with_bedrock(prompt, model_id, region="us-east-1"):
             ),
         )
         response_body = json.loads(response["body"].read().decode("utf-8"))
-        print("Response from Bedrock:")
-        print(json.dumps(response_body, indent=2))
+        #print("Response from Bedrock:")
+        #print(json.dumps(response_body, indent=2))
 
         # Extract response content
         if "content" in response_body and isinstance(response_body["content"], list):
@@ -104,7 +104,7 @@ def chatbot_response(question, split_files_dir, model_id, region="us-east-1"):
     truncated_context = full_text[:max_context_length]
 
     prompt = f"Context:\n{truncated_context}\n\nQuestion:\n{question}\nAnswer:"
-    print(f"Prompt length: {len(prompt)} characters")
+    #print(f"Prompt length: {len(prompt)} characters")
     if len(prompt) > 5000:
         print("Prompt exceeds maximum size. Consider reducing context further.")
 
@@ -118,7 +118,7 @@ def chatbot_response(question, split_files_dir, model_id, region="us-east-1"):
     return response
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.DEBUG)
+    #logging.basicConfig(level=logging.DEBUG)
 
     input_pdf_path = "docs/s3-api.pdf"
     split_files_dir = "split_pdfs"
