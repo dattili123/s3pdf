@@ -95,7 +95,7 @@ def generate_answer_with_bedrock(prompt, model_id, region="us-east-1"):
 
 
 def chatbot_response(question, split_files_dir, model_id, region="us-east-1"):
-    relevant_pdf_path = "split_pdfs/part_2.pdf"
+    relevant_pdf_path = find_relevant_pdf(question, split_files_dir)
     reader = PdfReader(relevant_pdf_path)
     pages = [page.extract_text() for page in reader.pages]
 
