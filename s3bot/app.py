@@ -2,12 +2,9 @@ import os
 import json
 import boto3
 from PyPDF2 import PdfReader
-from langchain.text_splitter import RecursiveCharacterTextSplitter
-from chromadb.config import Settings
-from chromadb.api.types import Documents, Embeddings, EmbeddingFunction
-from chromadb.utils import embedding_functions
-from chromadb import PersistentClient
-
+import chromadb
+from chromadb.api.types import Documents, EmbeddingFunction, Embeddings
+brt = boto3.client(service_name="bedrock-runtime", region_name='us-east-1')
 
 # Step 1: Read and Chunk PDF
 def read_and_chunk_pdf(pdf_path, chunk_size=800, chunk_overlap=25):
@@ -35,11 +32,12 @@ class TitanEmbeddingFunction:
         self.model_id = model_id
         self.bedrock_runtime = boto3.client("bedrock-runtime", region_name=region)
 
-    def __call__(self, input):
+    def __call__(self, input: Documents) -> Embeddings:
         # `input` is the new parameter name expected by ChromaDB
         embeddings = []
+        model_id = "amazon.titan-embed-text-v2:0"
         for text in input:  # Process each input text
-            response = self.bedrock_runtime.invoke_model(
+            response = brt.invoke_model(
                 modelId=self.model_id,
                 contentType="application/json",
                 accept="application/json",
@@ -52,7 +50,7 @@ class TitanEmbeddingFunction:
 
 # Step 3: Store Embeddings in ChromaDB
 def store_embeddings_in_chromadb(chunks, embedding_function):
-    client = PersistentClient(path="./chromadb")
+    client = chromadb.PersistentClient(path="./chromadb")
     collection = client.get_or_create_collection(name="my_collection", embedding_function=embedding_function)
 
     # Fetch existing metadata to identify already added embeddings
@@ -143,7 +141,7 @@ if __name__ == "__main__":
     embedding_function = TitanEmbeddingFunction(model_id="amazon.titan-embed-text-v2:0")
 
     # Initialize ChromaDB client
-    client = PersistentClient(path="./chromadb")
+    client = chromadb.PersistentClient(path="./chromadb")
     collection = client.get_or_create_collection(name="my_collection", embedding_function=embedding_function)
 
     # Check if collection has existing embeddings
