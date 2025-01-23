@@ -1,7 +1,7 @@
-import streamlit as st
 import os
 import json
 import boto3
+import streamlit as st
 from PyPDF2 import PdfReader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from chromadb import PersistentClient
@@ -99,36 +99,38 @@ def query_chromadb_and_generate_response(user_query, embedding_function, collect
     full_prompt = f"Relevant context: {relevant_text}\n\nUser question: {user_query}"
     return generate_answer_with_bedrock(full_prompt, model_id, region)
 
-# Streamlit App
-st.title("Chatbot Using AWS Bedrock and ChromaDB")
+# Streamlit UI
+st.title("AWS Knowledge Base Chatbot")
+st.write("Ask questions about AWS services based on the processed knowledge base.")
 
-# File Upload
-uploaded_file = st.file_uploader("Upload PDF for Context", type="pdf")
-if uploaded_file is not None:
-    st.write("Processing PDF...")
-    pdf_path = f"./{uploaded_file.name}"
-    with open(pdf_path, "wb") as f:
-        f.write(uploaded_file.read())
+# PDF Path
+pdf_path = "./s3-api.pdf"
+if os.path.exists(pdf_path):
+    st.write("📄 Found local PDF file. Processing...")
     chunks = read_and_chunk_pdf(pdf_path)
-    st.write("PDF successfully processed into chunks.")
+    st.success("PDF processed successfully!")
 
-# Initialize Embedding Function and ChromaDB
-model_id = "anthropic.claude-3-5-sonnet-20240620-v1:0"
-region = "us-east-1"
-embedding_function = TitanEmbeddingFunction(model_id=model_id, region=region)
-client = PersistentClient(path="./chromadb")
-collection = client.get_or_create_collection(name="my_collection", embedding_function=embedding_function)
+    # Initialize ChromaDB and Store Embeddings
+    model_id = "anthropic.claude-3-5-sonnet-20240620-v1:0"
+    region = "us-east-1"
+    embedding_function = TitanEmbeddingFunction(model_id=model_id, region=region)
 
-if st.button("Store Embeddings"):
-    if chunks:
+    client = PersistentClient(path="./chromadb")
+    collection = client.get_or_create_collection(name="my_collection", embedding_function=embedding_function)
+
+    existing_data = collection.get(include=["metadatas"])
+    if not existing_data["metadatas"]:
+        st.write("Storing embeddings...")
         store_embeddings_in_chromadb(chunks, embedding_function)
-        st.success("Embeddings successfully stored!")
+        st.success("Embeddings stored successfully!")
     else:
-        st.error("No chunks to store. Please upload a PDF.")
+        st.write("Embeddings already exist. Ready to chat.")
 
-# Chat Interface
-user_query = st.text_input("Ask your question:")
-if user_query:
-    response = query_chromadb_and_generate_response(user_query, embedding_function, collection, model_id, region)
-    st.write("Chatbot Response:")
-    st.write(response)
+    # Chat Interface
+    user_query = st.text_input("Ask your question:")
+    if user_query:
+        response = query_chromadb_and_generate_response(user_query, embedding_function, collection, model_id, region)
+        st.subheader("Chatbot Response:")
+        st.write(response)
+else:
+    st.error("❌ PDF file not found. Please ensure 's3-api.pdf' is available in the current directory.")
