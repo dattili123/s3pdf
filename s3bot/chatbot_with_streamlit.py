@@ -2,8 +2,8 @@ import os
 import json
 import base64
 import boto3
-import streamlit as st
 from PyPDF2 import PdfReader
+import streamlit as st
 import chromadb
 from chromadb.api.types import Documents, EmbeddingFunction, Embeddings
 
@@ -122,29 +122,35 @@ def query_chromadb_and_generate_response(user_query, embedding_function, collect
 # Streamlit Interface
 st.set_page_config(page_title="AWS Bedrock Chatbot", page_icon="🤖", layout="wide")
 
-# Updated CSS for Full Page Background
+# Add custom CSS for styling
 st.markdown(
     """
     <style>
         html, body {
             background-color: #f4f7fc; /* Light blue-gray background for the entire page */
         }
-        .main {
-            padding-top: 0 !important;
-        }
-        .block-container {
-            padding-top: 10px !important;
-        }
-        .left-banner {
-            text-align: center;
-            padding: 20px;
-            background-color: #ffffff; /* White background for banner */
+        .header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background-color: #2c3e50; /* Dark blue-gray header background */
+            padding: 10px 20px;
             border-radius: 10px;
-            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            color: white;
+        }
+        .header img {
+            height: 50px;
+            max-width: 100px;
+        }
+        .header h1 {
+            margin: 0;
+            flex-grow: 1;
+            text-align: center;
+            font-size: 24px;
         }
         .chatbot-container {
             margin-top: 20px;
-            background-color: #ffffff; /* White background for chatbot */
+            background-color: #ffffff;
             padding: 20px;
             border-radius: 10px;
             box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
@@ -153,29 +159,9 @@ st.markdown(
             padding-top: 20px;
             padding-left: 10px;
             padding-right: 10px;
-            background-color: #ffffff; /* White background for conversation history */
+            background-color: #ffffff;
             border-radius: 10px;
             box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-        }
-        h1, h2, h3, h4 {
-            color: #2c3e50; /* Dark blue-gray for all headings */
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-        }
-        .stButton button {
-            background-color: #2c3e50; /* Dark blue-gray for buttons */
-            color: white;
-            border-radius: 5px;
-            font-size: 16px;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            padding: 10px 20px;
-        }
-        .stButton button:hover {
-            background-color: #34495e; /* Slightly darker blue-gray on hover */
-            color: white;
-        }
-        .stTextArea textarea {
-            border: 1px solid #ddd;
-            border-radius: 5px;
         }
         .conversation-history h2 {
             margin-bottom: 15px;
@@ -186,24 +172,54 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-# Layout with Columns
-col1, col2, col3 = st.columns([1, 2, 1])  # Adjust column proportions
+# Header Section
+st.markdown('<div class="header">', unsafe_allow_html=True)
 
-# Left Banner
-with col1:
-    st.markdown('<div class="left-banner">', unsafe_allow_html=True)
-    st.image(BANNER_PATH, use_column_width=True)
-    st.markdown('</div>', unsafe_allow_html=True)
+# Logo
+st.markdown(
+    f'<img src="data:image/png;base64,{load_image_as_base64(LOGO_PATH)}" class="logo" />',
+    unsafe_allow_html=True,
+)
 
-# Center: Chatbot Interface
+# Title
+st.markdown('<h1>AWS Bedrock Chatbot with ChromaDB</h1>', unsafe_allow_html=True)
+
+# Banner
+st.markdown(
+    f'<img src="data:image/png;base64,{load_image_as_base64(BANNER_PATH)}" class="banner" />',
+    unsafe_allow_html=True,
+)
+
+st.markdown('</div>', unsafe_allow_html=True)
+
+# Ensure session state initialization for collection and conversation
+if "collection" not in st.session_state:
+    with st.spinner("Checking existing embeddings in ChromaDB..."):
+        embedding_function = TitanEmbeddingFunction(model_id="amazon.titan-embed-text-v2:0")
+        client = chromadb.PersistentClient(path="./chromadb")
+        collection = client.get_or_create_collection(name="my_collection", embedding_function=embedding_function)
+        existing_data = collection.get(include=["metadatas"])
+
+        if not existing_data["metadatas"]:
+            st.info("Embeddings not found. Generating new embeddings...")
+            chunks = read_and_chunk_pdf(PDF_PATH)
+            st.session_state.collection = store_embeddings_in_chromadb(chunks, embedding_function)
+            st.success("Embeddings have been generated and stored!")
+        else:
+            st.session_state.collection = collection
+            st.success("Existing embeddings found. Skipping embedding generation.")
+
+if "conversation" not in st.session_state:
+    st.session_state["conversation"] = []
+
+# Layout
+col1, col2, col3 = st.columns([1, 2, 1])
+
+# Left: Chatbot Interface
 with col2:
-    st.image(LOGO_PATH, width=150)  # Logo at the top
-    st.title("AWS Bedrock Chatbot with ChromaDB")
     st.subheader("Chatbot Interface")
     user_query = st.text_input("Ask your question:")
     if st.button("Submit"):
-        if "conversation" not in st.session_state:
-            st.session_state["conversation"] = []
         with st.spinner("Generating response..."):
             model_id = "anthropic.claude-3-5-sonnet-20240620-v1:0"
             response = query_chromadb_and_generate_response(
@@ -212,7 +228,6 @@ with col2:
                 st.session_state.collection,
                 model_id,
             )
-            # Add to conversation history
             st.session_state["conversation"].append(("User", user_query))
             st.session_state["conversation"].append(("Bot", response))
             st.text_area("Chatbot Response:", value=response, height=200)
@@ -221,8 +236,7 @@ with col2:
 with col3:
     st.markdown('<div class="conversation-history">', unsafe_allow_html=True)
     st.subheader("Conversation History")
-    if "conversation" in st.session_state:
-        for i, (speaker, message) in enumerate(st.session_state["conversation"]):
-            with st.expander(f"{speaker}: {message[:30]}..."):  # Display first 30 chars in expander title
-                st.write(f"{message}")
+    for i, (speaker, message) in enumerate(st.session_state["conversation"]):
+        with st.expander(f"{speaker}: {message[:30]}..."):
+            st.write(message)
     st.markdown('</div>', unsafe_allow_html=True)
