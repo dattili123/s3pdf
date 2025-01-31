@@ -122,6 +122,23 @@ def query_chromadb_and_generate_response(user_query, embedding_function, collect
 # Streamlit Interface
 st.set_page_config(page_title="AWS Bedrock Chatbot", page_icon="🤖", layout="wide")
 
+
+if "collection" not in st.session_state:
+    with st.spinner("Initializing chromadb...."):
+        embedding_function = TitanEmbeddingFunction(model_id="amazon.titan-embed-text-v2:0")
+        client = chromadb.PersistentClient(path="./chromadb")
+        collection = client.get_or_create_collection(name="mycollection", embedding_function=embedding_function)
+        existing_data = collection.get(include=["metadatas"])
+
+        if not existing_data["metadatas"]:
+            st.info("Embeddings not found. Generating new embeddings.....")
+            chunks = read_and_chunk_pdf(PDF_PATH)
+            st.session_state.collection = store_embeddings_in_chromadb(chunks, embedding_function)
+            st.success("Embeddings have generated and stored!")
+        else:
+            st.session_state.collection = collection
+            st.success("Existing embeddings found. Ready to use!")
+
 # Updated CSS for Full Page Background
 st.markdown(
     """
