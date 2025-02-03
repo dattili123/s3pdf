@@ -12,7 +12,7 @@ PROJECT_KEY = "PROJECT"  # Replace with your Jira project key
 
 # Directory for storing PDFs (Assumed to exist)
 PDF_DIR = "pdf_dir"
-PDF_FILE_PATH = os.path.join(PDF_DIR, "jira_issues_detailed_wrapped.pdf")
+PDF_FILE_PATH = os.path.join(PDF_DIR, "jira_issues_improved.pdf")
 
 # Initialize Jira Connection
 jira = Jira(
@@ -50,6 +50,21 @@ def get_jira_issues(project_key, max_results=10):
     return issue_list
 
 
+def write_wrapped_text(c, text, x, y, max_width, line_height):
+    """
+    Writes text with wrapping to fit within a specified width.
+    """
+    lines = simpleSplit(text, "Helvetica", 10, max_width)
+    for line in lines:
+        if y < 50:  # Start a new page if space is insufficient
+            c.showPage()
+            c.setFont("Helvetica", 10)
+            y = letter[1] - 50  # Reset y position
+        c.drawString(x, y, line)
+        y -= line_height
+    return y
+
+
 def write_to_pdf(data, pdf_path):
     """
     Writes detailed Jira issue information to a PDF file with text wrapping.
@@ -72,32 +87,20 @@ def write_to_pdf(data, pdf_path):
                 c.setFont("Helvetica", 10)
                 y_position = height - 50
 
-            # Write each field and wrap text as needed
-            c.drawString(50, y_position, f'Key: {issue["Key"]}')
-            y_position -= 15
-            c.drawString(60, y_position, f'Summary: {issue["Summary"]}')
-            y_position -= 15
-            c.drawString(60, y_position, f'Status: {issue["Status"]}, Reporter: {issue["Reporter"]}, Assignee: {issue["Assignee"]}')
-            y_position -= 15
-            c.drawString(60, y_position, f'Created: {issue["Created"]}')
-            y_position -= 15
+            # Write each field with text wrapping for longer text
+            y_position = write_wrapped_text(c, f'Key: {issue["Key"]}', 50, y_position, width - 100, 15)
+            y_position = write_wrapped_text(c, f'Summary: {issue["Summary"]}', 60, y_position, width - 100, 15)
+            y_position = write_wrapped_text(c, f'Status: {issue["Status"]}, Reporter: {issue["Reporter"]}, Assignee: {issue["Assignee"]}', 60, y_position, width - 100, 15)
+            y_position = write_wrapped_text(c, f'Created: {issue["Created"]}', 60, y_position, width - 100, 15)
 
             # Add Description with text wrapping
-            description_lines = simpleSplit(issue["Description"], "Helvetica", 10, width - 100)
-            c.drawString(60, y_position, "Description:")
-            y_position -= 15
-            for line in description_lines:
-                if y_position < 50:  # Add new page if text exceeds the current page
-                    c.showPage()
-                    c.setFont("Helvetica", 10)
-                    y_position = height - 50
-                c.drawString(70, y_position, line.strip())
-                y_position -= 15
+            y_position = write_wrapped_text(c, "Description:", 60, y_position, width - 100, 15)
+            y_position = write_wrapped_text(c, issue["Description"], 70, y_position, width - 100, 15)
 
             y_position -= 20  # Space between issues
 
     c.save()
-    print(f"PDF report with wrapped text generated: {pdf_path}")
+    print(f"PDF report with improved text wrapping generated: {pdf_path}")
 
 
 if __name__ == "__main__":
