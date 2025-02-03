@@ -2,12 +2,17 @@ import os
 from atlassian import Jira
 from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen import canvas
+from reportlab.lib.utils import simpleSplit
 
 # Jira Configuration
 JIRA_URL = "https://your-jira-instance.atlassian.net"
 USERNAME = "your-email@example.com"
 API_TOKEN = "your-api-token"  # Use API token for authentication
 PROJECT_KEY = "PROJECT"  # Replace with your Jira project key
+
+# Directory for storing PDFs (Assumed to exist)
+PDF_DIR = "pdf_dir"
+PDF_FILE_PATH = os.path.join(PDF_DIR, "jira_issues_detailed_wrapped.pdf")
 
 # Initialize Jira Connection
 jira = Jira(
@@ -16,10 +21,6 @@ jira = Jira(
     password=API_TOKEN,
     cloud=True
 )
-
-# Directory for storing PDFs (Assumed to exist)
-PDF_DIR = "pdf_dir"
-PDF_FILE_PATH = os.path.join(PDF_DIR, "jira_issues_detailed.pdf")
 
 
 def get_jira_issues(project_key, max_results=10):
@@ -51,7 +52,7 @@ def get_jira_issues(project_key, max_results=10):
 
 def write_to_pdf(data, pdf_path):
     """
-    Writes detailed Jira issue information to a PDF file.
+    Writes detailed Jira issue information to a PDF file with text wrapping.
     """
     c = canvas.Canvas(pdf_path, pagesize=letter)
     width, height = letter
@@ -71,6 +72,7 @@ def write_to_pdf(data, pdf_path):
                 c.setFont("Helvetica", 10)
                 y_position = height - 50
 
+            # Write each field and wrap text as needed
             c.drawString(50, y_position, f'Key: {issue["Key"]}')
             y_position -= 15
             c.drawString(60, y_position, f'Summary: {issue["Summary"]}')
@@ -80,12 +82,12 @@ def write_to_pdf(data, pdf_path):
             c.drawString(60, y_position, f'Created: {issue["Created"]}')
             y_position -= 15
 
-            # Add Description (handle multi-line text)
-            description_lines = issue["Description"].split('\n')
+            # Add Description with text wrapping
+            description_lines = simpleSplit(issue["Description"], "Helvetica", 10, width - 100)
             c.drawString(60, y_position, "Description:")
             y_position -= 15
             for line in description_lines:
-                if y_position < 50:
+                if y_position < 50:  # Add new page if text exceeds the current page
                     c.showPage()
                     c.setFont("Helvetica", 10)
                     y_position = height - 50
@@ -95,7 +97,7 @@ def write_to_pdf(data, pdf_path):
             y_position -= 20  # Space between issues
 
     c.save()
-    print(f"PDF report with detailed information generated: {pdf_path}")
+    print(f"PDF report with wrapped text generated: {pdf_path}")
 
 
 if __name__ == "__main__":
