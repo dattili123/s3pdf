@@ -1,4 +1,4 @@
-rom atlassian import Jira
+from atlassian import Jira
 import json
 # Jira Configuration
 JIRA_URL = "https://your-jira-instance.atlassian.net"
