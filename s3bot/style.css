@@ -1,125 +1,51 @@
-import os
-import json
-import base64
-import boto3
-import streamlit as st
-from PyPDF2 import PdfReader
-import chromadb
-from chromadb.api.types import Documents, EmbeddingFunction, Embeddings
-from atlassian import Jira, Confluence
-from langchain.text_splitter import RecursiveCharacterTextSplitter
+# Streamlit Interface with Updated UI
+st.set_page_config(page_title="AWS Bedrock Chatbot with ChromaDB", page_icon="🤖", layout="wide")
 
-# --- AWS and API Credentials (Keep these the same) ---
-brt = boto3.client(service_name="bedrock-runtime", region_name="us-east-1")
-PDF_PATH = "./s3-api.pdf"  # Update if needed
-LOGO_PATH = "./logo.png"      # Update with your logo path
-BANNER_PATH = "./chatbot.png"  # Update with your banner path
-# ... (Confluence and Jira credentials)
-
-# --- Confluence PDF Export (Keep this the same) ---
-# ... (export_page_to_pdf, export_all_confluence_pages functions)
-export_all_confluence_pages()
-
-# --- Utility Functions (Keep these the same) ---
-# ... (load_image_as_base64, read_and_chunk_pdf functions)
-
-# --- Embedding Function (Keep this the same) ---
-class TitanEmbeddingFunction:
-    # ... (implementation remains the same)
-
-# --- ChromaDB Functions (Keep these the same) ---
-# ... (store_embeddings_in_chromadb function)
-
-# --- Bedrock Answer Generation (Keep this the same) ---
-# ... (generate_answer_with_bedrock function)
-
-# --- Query and Response Function (Keep this the same) ---
-# ... (query_chromadb_and_generate_response function)
-
-# --- Streamlit UI Enhancements ---
-st.set_page_config(page_title="AWS Bedrock Chatbot", page_icon="🤖", layout="wide")
-
-# Custom CSS
 st.markdown(
     """
     <style>
-        body { /* ... (styles from previous response) ... */ }
-        .main { /* ... (styles from previous response) ... */ }
-        .container { /* ... (styles from previous response) ... */ }
-        .header { /* ... (styles from previous response) ... */ }
-        .logo { /* ... (styles from previous response) ... */ }
-        .title { /* ... (styles from previous response) ... */ }
-        .chat-area { /* ... (styles from previous response) ... */ }
-        .user-input { /* ... (styles from previous response) ... */ }
-        .message { /* ... (styles from previous response) ... */ }
-        .user-message { /* ... (styles from previous response) ... */ }
-        .bot-message { /* ... (styles from previous response) ... */ }
-        .sidebar { /* ... (styles from previous response) ... */ }
-        .sidebar-title { /* ... (styles from previous response) ... */ }
-        .history-item { /* ... (styles from previous response) ... */ }
-        .history-item:hover { /* ... (styles from previous response) ... */ }
-        .stButton button { /* ... (styles from previous response) ... */ }
-        .stButton button:hover { /* ... (styles from previous response) ... */ }
+        body { background-color: #f0f4f8; font-family: 'Segoe UI'; }
+        .main { background-color: #ffffff; padding: 20px; border-radius: 10px; }
+        .header { text-align: center; margin-bottom: 30px; }
+        .header img { width: 120px; }
+        .chat-container { margin-top: 20px; display: flex; gap: 20px; }
+        .chat-section { background-color: #ffffff; padding: 20px; border-radius: 10px; }
     </style>
     """,
     unsafe_allow_html=True,
 )
 
-# --- Streamlit App Layout ---
-st.markdown("<div class='container'>", unsafe_allow_html=True)
+# Header
+st.markdown('<div class="header">', unsafe_allow_html=True)
+st.image(LOGO_PATH)
+st.markdown("<h1>AWS Bedrock Chatbot with ChromaDB</h1>", unsafe_allow_html=True)
+st.markdown('</div>', unsafe_allow_html=True)
 
-st.markdown("<div class='header'>", unsafe_allow_html=True)
-st.image(LOGO_PATH, width=200, output_format="PNG")
-st.markdown("<h1 class='title'>AWS Bedrock Chatbot</h1>", unsafe_allow_html=True)
-st.markdown("</div>", unsafe_allow_html=True)
+# Chat Interface
+col1, col2 = st.columns([2, 1])
 
-col1, col2 = st.columns([3, 1])
-
-with col1:  # Chat Area
-    st.markdown("<div class='chat-area'>", unsafe_allow_html=True)
-    user_query = st.text_area("Ask your question:", height=100, placeholder="Enter your question here...")
+# Chatbot Section
+with col1:
+    st.subheader("Chatbot Interface")
+    user_query = st.text_input("Ask your question:")
     if st.button("Submit"):
+        if "conversation" not in st.session_state:
+            st.session_state["conversation"] = []
         with st.spinner("Generating response..."):
-            model_id = "anthropic.claude-3-5-sonnet-20240620-v1:0" # Or your preferred model
+            model_id = "anthropic.claude-3-5-sonnet-20240620-v1:0"
             response = query_chromadb_and_generate_response(
                 user_query,
                 TitanEmbeddingFunction(model_id="amazon.titan-embed-text-v2:0"),
                 st.session_state.collection,
                 model_id,
             )
-            st.session_state.conversation.append(("User", user_query))
-            st.session_state.conversation.append(("Bot", response))
-            st.markdown(f"<div class='message bot-message'>{response}</div>", unsafe_allow_html=True)
-    st.markdown("</div>", unsafe_allow_html=True)
+            st.session_state["conversation"].append(("User", user_query))
+            st.session_state["conversation"].append(("Bot", response))
+            st.text_area("Chatbot Response:", value=response, height=200)
 
-with col2:  # Conversation History
-    st.markdown("<div class='sidebar'>", unsafe_allow_html=True)
-    st.markdown("<h3 class='sidebar-title'>Conversation History</h3>", unsafe_allow_html=True)
+# Conversation History Section
+with col2:
+    st.subheader("Conversation History")
     if "conversation" in st.session_state:
-        for i, (speaker, message) in enumerate(st.session_state["conversation"]):
-            st.markdown(
-                f"<div class='history-item' onclick='this.querySelector(\".message-content\").style.display = (this.querySelector(\".message-content\").style.display === \"block\" ? \"none\" : \"block\");'>{speaker}: {message[:30]}...<div class='message-content' style='display:none;'>{message}</div></div>",
-                unsafe_allow_html=True,
-            )
-    st.markdown("</div>", unsafe_allow_html=True)
-
-st.markdown("</div>", unsafe_allow_html=True)
-
-# --- ChromaDB Initialization (Keep this the same) ---
-if "collection" not in st.session_state:
-    with st.spinner("Initializing chromadb...."):
-        embedding_function = TitanEmbeddingFunction(model_id="amazon.titan-embed-text-v2:0")
-        client = chromadb.PersistentClient(path="./chromadb")  # Or wherever you store your ChromaDB
-        collection = client.get_or_create_collection(name="mycollection", embedding_function=embedding_function)
-
-        st.session_state.collection = store_embeddings_in_chromadb("./pdf_dir", embedding_function) # Path to your PDF directory
-        st.success("Embeddings have generated and stored!")
-        st.session_state["conversation"] = []  # Initialize conversation history
-else:
-    st.success("Existing embeddings found. Ready to use!")
-    if "conversation" not in st.session_state:
-        st.session_state["conversation"] = [] # Initialize conversation history
-
-if st.button("Clear Cache"):
-    st.session_state.clear()
-    st.success("Cache cleared!")
+        for speaker, message in st.session_state["conversation"]:
+            st.write(f"**{speaker}:** {message}")
