@@ -3,8 +3,7 @@ import json
 import base64
 import boto3
 import streamlit as st
-from pypdf import PdfReader
-from pypdf_with_image import page_to_text_with_ocr
+import pdfplumber
 import chromadb
 from chromadb.api.types import Documents, EmbeddingFunction, Embeddings
 from langchain.text_splitter import RecursiveCharacterTextSplitter
@@ -16,26 +15,25 @@ PDF_DIR = "./pdf_dir"
 LOGO_PATH = "./logo.png"
 BANNER_PATH = "./chatbot.png"
 
-# Function: Read and Chunk PDF with OCR
-def read_and_chunk_pdf(pdf_path, chunk_size=800, chunk_overlap=25, use_ocr=True):
+# Function: Read and Chunk PDF using pdfplumber
+def read_and_chunk_pdf(pdf_path, chunk_size=800, chunk_overlap=25):
+    """
+    Reads a PDF and extracts text chunks using pdfplumber.
+    """
     text_splitter = RecursiveCharacterTextSplitter(chunk_size=chunk_size, chunk_overlap=chunk_overlap)
     all_chunks = []
 
     try:
-        pdf_reader = PdfReader(pdf_path)
-        for page_num, page in enumerate(pdf_reader.pages):
-            extracted_text = page.extract_text()
+        with pdfplumber.open(pdf_path) as pdf:
+            for page_num, page in enumerate(pdf.pages):
+                extracted_text = page.extract_text()
 
-            # Use OCR if text is missing
-            if use_ocr and (not extracted_text or len(extracted_text.strip()) < 50):
-                extracted_text = page_to_text_with_ocr(page)
-
-            if extracted_text:
-                split_docs = text_splitter.create_documents(
-                    texts=[extracted_text],
-                    metadatas=[{"page": page_num + 1}]
-                )
-                all_chunks.extend(split_docs)
+                if extracted_text:
+                    split_docs = text_splitter.create_documents(
+                        texts=[extracted_text],
+                        metadatas=[{"page": page_num + 1}]
+                    )
+                    all_chunks.extend(split_docs)
 
     except Exception as e:
         print(f"Error reading {pdf_path}: {str(e)}")
