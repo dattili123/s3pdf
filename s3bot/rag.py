@@ -201,3 +201,38 @@ with col3:
     for speaker, message in st.session_state["conversation"]:
         st.write(f"**{speaker}:** {message}")
 
+import streamlit as st
+import time
+from PIL import Image
+
+# Image Paths
+image_paths = ["image1.jpg", "image2.jpg", "image3.jpg"]  # Replace with actual image file paths
+
+# Inject Custom CSS for Smooth Transitions
+st.markdown("""
+    <style>
+        .image-container {
+            text-align: center;
+            transition: opacity 1.5s ease-in-out;
+            opacity: 0;
+        }
+        .image-container.show {
+            opacity: 1;
+        }
+    </style>
+""", unsafe_allow_html=True)
+
+# Placeholder for Image
+image_placeholder = st.empty()
+
+# Infinite Loop with Smooth Transition
+while True:
+    for img_path in image_paths:
+        img = Image.open(img_path)
+
+        # Display Image with CSS Animation
+        image_placeholder.markdown(f'<div class="image-container show"><img src="data:image/png;base64,{st.image(img, use_column_width=True)}" /></div>',
+                                   unsafe_allow_html=True)
+        time.sleep(2)  # Wait for 2 seconds before switching images
+
+
