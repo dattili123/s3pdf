@@ -24,27 +24,31 @@ def export_page_to_pdf(page_id, output_dir=PDF_DIR):
 # Function: Export Parent and Child Pages
 import requests
 
+import requests
+
 def export_page_and_children(page_id):
     try:
-        # Export the parent page first
+        # Step 1: Always Export the Parent Page
         export_page_to_pdf(page_id)
 
-        # Get child pages with error handling
+        # Step 2: Try to Get Child Pages
         try:
             child_pages = list(confluence.get_child_pages(page_id))  
         except requests.exceptions.HTTPError as e:
-            print(f"⚠️ HTTPError: Could not retrieve child pages for Page ID {page_id}. Skipping... ({e})")
-            return  # Skip further processing for this page
+            print(f"⚠️ HTTPError: Could not retrieve child pages for Page ID {page_id}. Skipping child export... ({e})")
+            return  # Skip exporting children, but the parent page remains exported
 
+        # Step 3: Export Child Pages (If They Exist)
         if child_pages:
-            print(f"Page ID {page_id} has {len(child_pages)} child pages. Exporting all...")
+            print(f"✅ Page ID {page_id} has {len(child_pages)} child pages. Exporting all...")
             for child in child_pages:
                 export_page_to_pdf(child["id"])  # Recursively export child pages
         else:
-            print(f"Page ID {page_id} has no child pages.")
+            print(f"✅ Page ID {page_id} has no child pages. Only exporting the parent.")
 
     except Exception as e:
         print(f"❌ Error processing Page ID {page_id}: {e}")
+
 
 
 # Function: Export All Confluence Pages (Handles Parent & Children)
