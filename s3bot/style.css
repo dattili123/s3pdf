@@ -1,51 +1,42 @@
-# Streamlit Interface with Updated UI
-st.set_page_config(page_title="AWS Bedrock Chatbot with ChromaDB", page_icon="🤖", layout="wide")
+import streamlit as st
 
-st.markdown(
-    """
+# Inject Custom CSS to Remove Padding and Align Elements
+st.markdown("""
     <style>
-        body { background-color: #f0f4f8; font-family: 'Segoe UI'; }
-        .main { background-color: #ffffff; padding: 20px; border-radius: 10px; }
-        .header { text-align: center; margin-bottom: 30px; }
-        .header img { width: 120px; }
-        .chat-container { margin-top: 20px; display: flex; gap: 20px; }
-        .chat-section { background-color: #ffffff; padding: 20px; border-radius: 10px; }
+        .header-container {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0px !important;
+            margin: 0px !important;
+        }
+        .header-logo {
+            max-width: 120px;  /* Adjust size of logo */
+        }
+        .header-title {
+            font-size: 30px;
+            font-weight: bold;
+            color: black;
+            margin-left: 10px;
+        }
     </style>
-    """,
-    unsafe_allow_html=True,
-)
+""", unsafe_allow_html=True)
 
-# Header
-st.markdown('<div class="header">', unsafe_allow_html=True)
-st.image(LOGO_PATH)
-st.markdown("<h1>AWS Bedrock Chatbot with ChromaDB</h1>", unsafe_allow_html=True)
-st.markdown('</div>', unsafe_allow_html=True)
+# Create a Header Section with Two Columns
+col1, col2 = st.columns([0.2, 0.8])  # Adjust the ratio as needed
 
-# Chat Interface
-col1, col2 = st.columns([2, 1])
+with col1:
+    st.image("logo.png", width=120)  # Replace with actual logo path
 
-# Chatbot Section
+with col2:
+    st.markdown("<h1 class='header-title'>InfoSphere</h1>", unsafe_allow_html=True)
+
+# Horizontal Divider
+st.markdown("<hr style='border:1px solid black;'>", unsafe_allow_html=True)
+
+# Chatbot Interface
+col1, col2 = st.columns([1.5, 1.5])
 with col1:
     st.subheader("Chatbot Interface")
-    user_query = st.text_input("Ask your question:")
-    if st.button("Submit"):
-        if "conversation" not in st.session_state:
-            st.session_state["conversation"] = []
-        with st.spinner("Generating response..."):
-            model_id = "anthropic.claude-3-5-sonnet-20240620-v1:0"
-            response = query_chromadb_and_generate_response(
-                user_query,
-                TitanEmbeddingFunction(model_id="amazon.titan-embed-text-v2:0"),
-                st.session_state.collection,
-                model_id,
-            )
-            st.session_state["conversation"].append(("User", user_query))
-            st.session_state["conversation"].append(("Bot", response))
-            st.text_area("Chatbot Response:", value=response, height=200)
-
-# Conversation History Section
 with col2:
     st.subheader("Conversation History")
-    if "conversation" in st.session_state:
-        for speaker, message in st.session_state["conversation"]:
-            st.write(f"**{speaker}:** {message}")
