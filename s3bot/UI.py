@@ -30,6 +30,15 @@ set_background(BANNER_PATH)
 # Custom CSS to fix layout and align elements
 st.markdown("""
     <style>
+    /* Remove Streamlit's default padding */
+        .block-container {
+            padding-top: 0px !important;
+            padding-left: 0px;
+            padding-right: 0px;
+            margin-top: -50px; /* Moves content closer to the top */
+        }
+        /* Hide the three-dot menu */
+        header {visibility: hidden;}
         .header-container {
             display: flex;
             align-items: center;
