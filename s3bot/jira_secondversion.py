@@ -9,9 +9,9 @@ import requests  # Import the requests library
 
 
 # Jira Configuration
-JIRA_URL = "https://jira.fanniemae.com"  # Replace with your Jira URL
-USERNAME = "gbudfa"
-API_TOKEN = "rivonix$2025"  # Use API token for authentication
+JIRA_URL = "https://jira.org.com"  # Replace with your Jira URL
+USERNAME = ""
+API_TOKEN = "$2025"  # Use API token for authentication
 # NO LONGER NEEDED: PROJECT_KEY = "PANTHER"  # Replace with your Jira project key
 
 # PDF Output
