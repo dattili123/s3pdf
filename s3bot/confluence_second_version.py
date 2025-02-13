@@ -1,7 +1,13 @@
-def export_page_to_pdf(page_id, output_dir=PDF_DIR):
+import re
+import requests
+# Function: Export a single Confluence Page to PDF (if missing)
+def export_page_to_pdf(page_id, output_dir="pdf_dir"):
     try:
         page_info = confluence.get_page_by_id(page_id)
-        page_title = page_info['title'].replace("/", "_").replace(" ", "_")  # Ensure filename-safe format
+        
+        # Remove special characters and replace spaces with underscores
+        page_title = re.sub(r"[^a-zA-Z0-9]", "_", page_info["title"])  
+        
         file_path = f"{output_dir}/{page_id}_{page_title}.pdf"
 
         # Skip if the PDF already exists
@@ -20,6 +26,7 @@ def export_page_to_pdf(page_id, output_dir=PDF_DIR):
 
     except Exception as e:
         print(f"Failed to export page [{page_id}] to PDF: {str(e)}")
+
 
 # Function: Export Parent and Child Pages
 import requests
