@@ -1,86 +1,96 @@
-from atlassian import Jira
+import requests
 import json
 from reportlab.lib.pagesizes import letter
 from reportlab.lib.styles import ParagraphStyle
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Image
-from reportlab.lib.enums import TA_JUSTIFY  # Import for clearer alignment
+from reportlab.lib.enums import TA_JUSTIFY
 import os
-import requests  # Import the requests library
+from urllib.parse import quote_plus  # Import for URL encoding
 
 
 # Jira Configuration
-JIRA_URL = "https://jira.org.com"  # Replace with your Jira URL
+JIRA_URL = "https://jira..com"
 USERNAME = ""
-API_TOKEN = "$2025"  # Use API token for authentication
-# NO LONGER NEEDED: PROJECT_KEY = "PANTHER"  # Replace with your Jira project key
+API_TOKEN = "rivonix$2025"
 
 # PDF Output
 PDF_DIR = "pdf_dir"
-os.makedirs(PDF_DIR, exist_ok=True)  # Ensure the output directory exists
+os.makedirs(PDF_DIR, exist_ok=True)
 PDF_FILE_PATH = os.path.join(PDF_DIR, "jira_issues.pdf")
 
-# --- Initialize Jira Connection ---
-jira = Jira(
-    url=JIRA_URL,
-    username=USERNAME,
-    password=API_TOKEN,
-    verify_ssl=False  # Consider setting up proper SSL verification in production
-)
-
-
 def get_jira_issues(jql_query, max_results=1000):
-    """
-    Fetches Jira issues from a given project using a JQL query, including comments and attachments.
+    """Fetches Jira issues directly via the REST API."""
 
-    :param jql_query: The JQL query string.
-    :param max_results: Number of issues to retrieve.
-    :return: List of issue details.
-    """
-    issues = jira.jql(jql_query, limit=max_results, fields=['comment', 'attachment', 'summary', 'status', 'reporter', 'assignee', 'created', 'description', 'priority', 'components']) #Added fields to query
+    # 1. Construct the API endpoint URL.  Crucially, URL-encode the JQL query.
+    base_url = f"{JIRA_URL}/rest/api/2/search"
+    encoded_jql = quote_plus(jql_query)  # Properly URL-encode the JQL
+    fields = "comment,attachment,summary,status,reporter,assignee,created,description,priority,components" #Comma separated is more reliable
+    url = f"{base_url}?jql={encoded_jql}&maxResults={max_results}&fields={fields}"
 
-    if "issues" not in issues:
-        print("No issues found or invalid response.")
+    # 2. Make the API request with proper authentication.
+    headers = {
+        "Content-Type": "application/json",  # Important: Set the content type
+    }
+    auth = (USERNAME, API_TOKEN)
+
+    try:
+        response = requests.get(url, headers=headers, auth=auth, verify=False)  # Corrected auth
+        response.raise_for_status()  # Raise HTTPError for bad responses (4xx or 5xx)
+        response_json = response.json() #Get the JSON
+
+    except requests.exceptions.RequestException as e:
+        print(f"Error during API request: {e}")
+        print(f"  URL: {url}")  # Print the *full* URL for debugging
+        if hasattr(e, 'response') and e.response:
+            print(f"  Response Status Code: {e.response.status_code}")
+            print(f"  Response Content:\n{e.response.text}")
+        return []
+    except json.JSONDecodeError as e:
+        print(f"JSON Decode Error: {e}")
+        print(f"  Response Content:\n{response.text}")  # Print raw response for debugging
+        return []
+
+
+    if "issues" not in response_json:
+        print("No issues found in response.")
         return []
 
     issue_list = []
-    for issue in issues["issues"]:
-        # --- Extract Basic Issue Data ---
-        issue_data = {
-            "Key": issue["key"],
-            "Summary": issue["fields"]["summary"],
-            "Status": issue["fields"]["status"]["name"],
-            "Reporter": issue["fields"]["reporter"]["displayName"],
-            "Assignee": issue["fields"]["assignee"]["displayName"] if issue["fields"]["assignee"] else "Unassigned",
-            "Created": issue["fields"]["created"],
-            "Description": issue["fields"]["description"],
-            "Priority": issue["fields"]["priority"]["name"] if issue["fields"]["priority"] else "N/A", #Get priority.  Handle if it's None
-            "Components": ", ".join([comp["name"] for comp in issue["fields"]["components"]]) if issue["fields"]["components"] else "No Component",  #Handle components
+    for issue in response_json["issues"]:
+        fields = issue.get('fields', {})  # Handle missing 'fields' key
 
-            "Comments": [],  # Initialize an empty list for comments
-            "Attachments": []  # Initialize an empty list for attachments
+        # Use .get() with defaults for robust field handling
+        issue_data = {
+            "Key": issue.get("key", "No Key"),
+            "Summary": fields.get("summary", "No Summary"),
+            "Status": fields.get("status", {}).get("name", "No Status"),
+            "Reporter": fields.get("reporter", {}).get("displayName", "No Reporter"),
+            "Assignee": fields.get("assignee", {}).get("displayName", "Unassigned"),
+            "Created": fields.get("created", "No Creation Date"),
+            "Description": fields.get("description", "No Description"),
+            "Priority": fields.get("priority", {}).get("name", "N/A"),
+            "Components": ", ".join([comp.get("name", "Unknown Component") for comp in fields.get("components", [])]),
+            "Comments": [],
+            "Attachments": [],
         }
 
-        # --- Extract Comments ---
-        if 'comment' in issue['fields'] and issue['fields']['comment']['comments']:
-            for comment in issue['fields']['comment']['comments']:
-                comment_data = {
-                    'author': comment['author']['displayName'],
-                    'body': comment['body'],
-                    'created': comment['created']
-                }
-                issue_data["Comments"].append(comment_data)
+        # Comments
+        for comment in fields.get("comment", {}).get("comments", []):
+            issue_data["Comments"].append({
+                'author': comment.get("author", {}).get("displayName", "Unknown Author"),
+                'body': comment.get("body", "No Comment Body"),
+                'created': comment.get("created", "Unknown Date"),
+            })
 
-        # --- Extract Attachments ---
-        if 'attachment' in issue['fields'] and issue['fields']['attachment']:
-            for attachment in issue['fields']['attachment']:
-                attachment_data = {
-                    'filename': attachment['filename'],
-                    'content_url': attachment['content'],  # URL to download the attachment
-                    'author' : attachment['author']['displayName'],
-                    'created' : attachment['created'],
-                }
-                issue_data["Attachments"].append(attachment_data)
-        # print(json.dumps(issue_data, indent=4)) # Uncomment for debugging
+        # Attachments
+        for attachment in fields.get("attachment", []):
+            issue_data["Attachments"].append({
+                'filename': attachment.get("filename", "Unknown Filename"),
+                'content_url': attachment.get("content", ""),
+                'author': attachment.get("author", {}).get("displayName", "Unknown Author"),
+                'created': attachment.get("created", "Unknown Date"),
+            })
+
         issue_list.append(issue_data)
 
     return issue_list
@@ -88,111 +98,78 @@ def get_jira_issues(jql_query, max_results=1000):
 
 
 def write_to_pdf(data, pdf_path):
-    """
-    Generates a PDF report from the provided Jira issue data, including comments and image attachments.
-
-    :param data: List of Jira issue dictionaries.
-    :param pdf_path: Path to save the generated PDF.
-    """
+    """Generates PDF, handling missing data gracefully."""
     doc = SimpleDocTemplate(pdf_path, pagesize=letter)
-    styles = ParagraphStyle(
-        name='Normal',
-        fontName="Helvetica",
-        fontSize=10,
-        leading=12,
-        alignment=TA_JUSTIFY  # Use TA_JUSTIFY for justified text
-    )
-    
-    #Style for comments
-    comment_style = ParagraphStyle(
-        name='Comment',
-        parent=styles,
-        fontSize=9,
-        leading=11,
-        leftIndent=20  # Indent comments
-    )
-        #Style for attachment names
-    attachment_style = ParagraphStyle(
-        name='Attachment',
-        parent=styles,
-        fontSize=9,
-        leading=11,
-        textColor='blue', #Make them blue so they look like links.
-        leftIndent=20  # Indent attachment
-    )
+    styles = ParagraphStyle(name='Normal', fontName="Helvetica", fontSize=10, leading=12, alignment=TA_JUSTIFY)
+    comment_style = ParagraphStyle(name='Comment', parent=styles, fontSize=9, leading=11, leftIndent=20)
+    attachment_style = ParagraphStyle(name='Attachment', parent=styles, fontSize=9, leading=11, textColor='blue', leftIndent=20)
 
     story = []
     index = 1
 
     if not data:
         story.append(Paragraph("No issues retrieved from Jira.", styles))
-    else:
-        for issue in data:
-            story.append(Paragraph(f"{index}. <b>Key:</b> {issue['Key']}  <b>Priority:</b> {issue['Priority']} <b>Component:</b> {issue['Components']}", styles))  # Include priority and component
-            story.append(Paragraph(f"&nbsp;&nbsp;&nbsp;&nbsp; <b>Summary:</b> {issue['Summary']}", styles))
-            story.append(Paragraph(f"&nbsp;&nbsp;&nbsp;&nbsp;<b>Status:</b> {issue['Status']} <b>Reporter:</b> {issue['Reporter']}, <b>Assignee:</b> {issue['Assignee']}", styles))
-            story.append(Paragraph(f"&nbsp;&nbsp;&nbsp;&nbsp;<b>Created:</b> {issue['Created']}", styles))
-            story.append(Paragraph(f"&nbsp;&nbsp;&nbsp;&nbsp; <b>Description:</b> {issue['Description']}", styles))
+        doc.build(story)  # Build even if empty
+        return
 
-            # --- Add Comments ---
-            if issue["Comments"]:
-                story.append(Paragraph("&nbsp;&nbsp;&nbsp;&nbsp;<b>Comments:</b>", styles))
-                for comment in issue["Comments"]:
-                    story.append(Paragraph(f"&nbsp;&nbsp;&nbsp;&nbsp; - <i>{comment['author']} ({comment['created']}):</i> {comment['body']}", comment_style))
+    for issue in data:
+        story.append(Paragraph(f"{index}. <b>Key:</b> {issue['Key']}  <b>Priority:</b> {issue['Priority']} <b>Component:</b> {issue['Components']}", styles))
+        story.append(Paragraph(f"&nbsp;&nbsp;&nbsp;&nbsp; <b>Summary:</b> {issue['Summary']}", styles))
+        story.append(Paragraph(f"&nbsp;&nbsp;&nbsp;&nbsp;<b>Status:</b> {issue['Status']} <b>Reporter:</b> {issue['Reporter']}, <b>Assignee:</b> {issue['Assignee']}", styles))
+        story.append(Paragraph(f"&nbsp;&nbsp;&nbsp;&nbsp;<b>Created:</b> {issue['Created']}", styles))
+        story.append(Paragraph(f"&nbsp;&nbsp;&nbsp;&nbsp; <b>Description:</b> {issue['Description']}", styles))
 
-            # --- Add Attachments ---
-            if issue["Attachments"]:
-                story.append(Paragraph("&nbsp;&nbsp;&nbsp;&nbsp;<b>Attachments:</b>", styles))
-                for attachment in issue["Attachments"]:
-                    # Download and embed images directly
-                    if attachment['filename'].lower().endswith(('.png', '.jpg', '.jpeg', '.gif')):
-                        try:
-                            # print(f"Attempting to get: {attachment['content_url']}")   #Debugging print
-                            response = requests.get(attachment['content_url'], auth=(USERNAME, API_TOKEN), verify=False) # Added verify and auth
-                            response.raise_for_status()  # Raise an exception for bad status codes (4xx or 5xx)
+        if issue["Comments"]:
+            story.append(Paragraph("&nbsp;&nbsp;&nbsp;&nbsp;<b>Comments:</b>", styles))
+            for comment in issue["Comments"]:
+                story.append(Paragraph(f"&nbsp;&nbsp;&nbsp;&nbsp; - <i>{comment['author']} ({comment['created']}):</i> {comment['body']}", comment_style))
 
-                            image_path = os.path.join(PDF_DIR, attachment['filename'])
-                            with open(image_path, 'wb') as f:
-                                f.write(response.content)
-                            
-                            #Add the image.
-                            img = Image(image_path, width=200, height=150)  # Adjust width and height as needed
-                            img.hAlign = 'LEFT' #Align left.
-                            story.append(img)
+        if issue["Attachments"]:
+            story.append(Paragraph("&nbsp;&nbsp;&nbsp;&nbsp;<b>Attachments:</b>", styles))
+            for attachment in issue["Attachments"]:
+                if attachment['filename'].lower().endswith(('.png', '.jpg', '.jpeg', '.gif')) and attachment['content_url']:
+                    try:
+                        response = requests.get(attachment['content_url'], auth=(USERNAME, API_TOKEN), verify=False)  # Corrected auth
+                        response.raise_for_status()
 
-                            #Add a caption
-                            story.append(Paragraph(f"&nbsp;&nbsp;&nbsp;&nbsp; - Attachment: {attachment['filename']} (Uploaded by: {attachment['author']} on {attachment['created']})", attachment_style))
+                        image_path = os.path.join(PDF_DIR, attachment['filename'])
+                        with open(image_path, 'wb') as f:
+                            f.write(response.content)
 
-                        except requests.exceptions.RequestException as e:
-                            print(f"Error downloading attachment {attachment['filename']}: {e}")
-                            story.append(Paragraph(f"&nbsp;&nbsp;&nbsp;&nbsp; - Could not download attachment: {attachment['filename']}", comment_style))
-                        except Exception as e: #Catch other exceptions
-                            print(f"Error processing attachment {attachment['filename']}: {e}")
-                            story.append(Paragraph(f"&nbsp;&nbsp;&nbsp;&nbsp; - Could not process attachment: {attachment['filename']}", comment_style))
-
-
-                    else: #If it's not an image, just show the filename
+                        img = Image(image_path, width=200, height=150)
+                        img.hAlign = 'LEFT'
+                        story.append(img)
                         story.append(Paragraph(f"&nbsp;&nbsp;&nbsp;&nbsp; - Attachment: {attachment['filename']} (Uploaded by: {attachment['author']} on {attachment['created']})", attachment_style))
 
-
-            story.append(Paragraph('&nbsp;', styles))  # Add some vertical space
-            story.append(Paragraph("<br/>", styles))  # Add some vertical space
-            index += 1
+                    except requests.exceptions.RequestException as e:
+                        print(f"Error downloading attachment {attachment['filename']}: {e}")
+                        story.append(Paragraph(f"&nbsp;&nbsp;&nbsp;&nbsp; - Could not download: {attachment['filename']}", comment_style))
+                    except Exception as e:
+                        print(f"Other error with Attachment {attachment['filename']}: {e}")
+                        story.append(Paragraph(f"&nbsp;&nbsp;&nbsp; - Could not process: {attachment['filename']}", comment_style))
+                elif attachment['content_url']: #Show name if it's not an image
+                    story.append(Paragraph(f"&nbsp;&nbsp;&nbsp;&nbsp; - Attachment: {attachment['filename']} (Uploaded by: {attachment['author']} on {attachment['created']})", attachment_style))
+                else:
+                    story.append(Paragraph(f"&nbsp;&nbsp;&nbsp; - Attachment(No URL): {attachment.get('filename', 'Unknown Filename')}", comment_style))
+        story.append(Paragraph('&nbsp;', styles))
+        story.append(Paragraph("<br/>", styles))
+        index += 1
 
     doc.build(story)
 
 
 
 if __name__ == "__main__":
-    jql_query = '''
-        project in ("MTS Panther Service Desk") 
-        AND component in (SFA) 
-        AND assignee in (s5uyav) 
-        AND priority in (Highest, Critical, Blocker) 
-        AND createdDate >= startOfMonth(-7) 
-        AND createdDate <= startOfMonth(-2) 
+    jql_query = """
+        project in ("MTS Panther Service Desk")
+        AND component in (SFA)
+        AND assignee in (s5uyav)
+        AND priority in (Highest, Critical, Blocker)
+        AND createdDate >= startOfMonth(-7)
+        AND createdDate <= startOfMonth(-2)
         ORDER BY created DESC, status
-        '''
-    jira_issues = get_jira_issues(jql_query, max_results=500)
-    write_to_pdf(jira_issues, PDF_FILE_PATH)
-    print(f"PDF report generated at: {PDF_FILE_PATH}")
+        """
+    jira_issues = get_jira_issues(jql_query, max_results=10)  # Keep max_results small for testing
+    if jira_issues:
+        write_to_pdf(jira_issues, PDF_FILE_PATH)
+        print(f"PDF report generated at: {PDF_FILE_PATH}")
