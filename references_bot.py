@@ -16,33 +16,46 @@ def query_chromadb_and_generate_response(user_query, embedding_function, collect
     results = collection.query(query_embedding, n_results=5)
 
     if not results or "documents" not in results or not results["documents"]:
-        return "No relevant data found in the database.", []
+        return "No relevant data found in the database.", [], []
 
-    # Retrieve relevant text chunks and metadata
-    documents = [doc for sublist in results["documents"] for doc in sublist]
+    # Debug: Print metadata to verify structure
     metadata = results.get("metadatas", [])
+    print("DEBUG: Metadata Retrieved:", metadata)
+
+    # Retrieve relevant text chunks
+    documents = [doc for sublist in results["documents"] for doc in sublist]
 
     confluence_links = []
     other_pdf_sources = set()
 
     for meta in metadata:
-        if isinstance(meta, dict):  # Ensure metadata is a dictionary
-            source = meta.get("source", "Unknown Source")
+        if isinstance(meta, dict):
+            source = meta.get("source", "").strip()  # Get filename and remove extra spaces
             page = meta.get("page", "Unknown Page")
 
-            # Extract Page ID from Filename (Format: "{page_id}_{title}.pdf")
-            match = re.match(r"(\d+)_.*\.pdf", source)
-            if match:
-                page_id = match.group(1)  # Extract Page ID
-                confluence_links.append(
-                    f"- [{source.replace('_', ' ')}](https://confluence.organization.com/pages/viewpage.action?pageId={page_id}) (Page {page})"
-                )
-            else:
-                other_pdf_sources.add(f"- **File:** {source} | **Page:** {page}")
+            if source:
+                # Extract Page ID from Filename (Format: "{page_id}_{title}.pdf")
+                match = re.match(r"(\d+)_.*\.pdf", source)
+
+                if match:
+                    page_id = match.group(1)
+                    confluence_url = f"https://confluence.organization.com/pages/viewpage.action?pageId={page_id}"
+                    formatted_title = source.replace("_", " ")  # Replace underscores with spaces for readability
+
+                    confluence_links.append(f"- [{formatted_title}]({confluence_url}) (Page {page})")
+                else:
+                    other_pdf_sources.add(f"- **File:** {source} | **Page:** {page}")
+
+    # Debug: Check if Confluence links are being captured
+    if not confluence_links:
+        print("DEBUG: No Confluence links found! Check regex or file naming.")
 
     relevant_text = " ".join(documents)
-    full_prompt = f"Relevant Information: {relevant_text}\n\nUser Query: {user_query}\n\nAnswer:"
+    full_prompt = f"Relevant Information: {relevant_text}\n\nUser Query: {user_query}\n\nThink deeply and generate a perfect, context-aware response:"
+
     response = generate_answer_with_bedrock(full_prompt, model_id, region)
+
+    return response, confluence_links, other_pdf_sources
 
     return response, confluence_links, other_pdf_sources
 reference_section = "\n\n### References:\n"
