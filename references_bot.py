@@ -9,6 +9,44 @@ from chromadb.api.types import Documents, EmbeddingFunction, Embeddings
 from atlassian import Jira, Confluence
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 
+import re
+
+def query_chromadb_and_generate_response(user_query, embedding_function, collection, model_id, region="us-east-1"):
+    query_embedding = embedding_function([user_query])[0]
+    results = collection.query(query_embedding, n_results=5)
+
+    if not results or "documents" not in results or not results["documents"]:
+        return "No relevant data found in the database.", []
+
+    # Retrieve relevant text chunks and metadata
+    documents = [doc for sublist in results["documents"] for doc in sublist]
+    metadata = results.get("metadatas", [])
+
+    confluence_links = []
+    other_pdf_sources = set()
+
+    for meta in metadata:
+        if isinstance(meta, dict):  # Ensure metadata is a dictionary
+            source = meta.get("source", "Unknown Source")
+            page = meta.get("page", "Unknown Page")
+
+            # Extract Page ID from Filename (Format: "{page_id}_{title}.pdf")
+            match = re.match(r"(\d+)_.*\.pdf", source)
+            if match:
+                page_id = match.group(1)  # Extract Page ID
+                confluence_links.append(
+                    f"- [{source.replace('_', ' ')}](https://confluence.organization.com/pages/viewpage.action?pageId={page_id}) (Page {page})"
+                )
+            else:
+                other_pdf_sources.add(f"- **File:** {source} | **Page:** {page}")
+
+    relevant_text = " ".join(documents)
+    full_prompt = f"Relevant Information: {relevant_text}\n\nUser Query: {user_query}\n\nAnswer:"
+    response = generate_answer_with_bedrock(full_prompt, model_id, region)
+
+    return response, confluence_links, other_pdf_sources
+
+
 # AWS Bedrock client
 brt = boto3.client(service_name="bedrock-runtime", region_name="us-east-1")
 PDF_DIR = "./pdf_dir"  # Directory where PDFs are stored
