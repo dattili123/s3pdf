@@ -148,7 +148,7 @@ def write_to_pdf(data, pdf_path):
                     if attachment['filename'].lower().endswith(('.png', '.jpg', '.jpeg', '.gif')):
                         try:
                             # print(f"Attempting to get: {attachment['content_url']}")   #Debugging print
-                            response = requests.get(attachment['content_url'], auth=(USERNAME, API_TOKEN), verify=False) # Added verify
+                            response = requests.get(attachment['content_url'], auth=(USERNAME, API_TOKEN), verify=False) # Added verify and auth
                             response.raise_for_status()  # Raise an exception for bad status codes (4xx or 5xx)
 
                             image_path = os.path.join(PDF_DIR, attachment['filename'])
