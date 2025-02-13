@@ -45,7 +45,13 @@ def query_chromadb_and_generate_response(user_query, embedding_function, collect
     response = generate_answer_with_bedrock(full_prompt, model_id, region)
 
     return response, confluence_links, other_pdf_sources
+reference_section = "\n\n### References:\n"
+        if confluence_links:
+            reference_section += "**📄 Confluence Sources:**\n" + "\n".join(confluence_links) + "\n"
+        if other_pdf_sources:
+            reference_section += "**📂 Other PDF Sources:**\n" + "\n".join(other_pdf_sources) + "\n"
 
+        final_response = f"{response}{reference_section}"
 
 # AWS Bedrock client
 brt = boto3.client(service_name="bedrock-runtime", region_name="us-east-1")
