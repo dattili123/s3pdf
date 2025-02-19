@@ -58,11 +58,12 @@ if user_query:
         st.session_state["conversation"].append(("User", user_query))
         st.session_state["conversation"].append(("Bot", response))
 
-    # Display conversation using st.chat_message
+    # Display conversation using st.chat_message with improved formatting
     with st.chat_message("user"):
         st.markdown(f"**User:** {user_query}")
     with st.chat_message("assistant"):
-        st.markdown(f"**Bot:** {response}")
+        st.markdown("**Bot Response:**")
+        st.markdown(response.replace("\n", "  \n"))  # Preserve newlines
 
 # Clear cache button
 if st.button("Clear Cache", use_container_width=True):
