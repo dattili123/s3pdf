@@ -1,71 +1,22 @@
 import streamlit as st
-import base64
-import chromadb
-from titan import TitanEmbeddingFunction
 
-# Page configuration
-st.set_page_config(page_title="Ask SRE Infra Assist", page_icon="🤖", layout="wide")
+# Sample images (replace with your image URLs or local file paths)
+image1 = "https://via.placeholder.com/150"  # Replace with actual image path
+image2 = "https://via.placeholder.com/150"
+image3 = "https://via.placeholder.com/150"
 
-# Function to set background image
-def set_background(image_path):
-    with open(image_path, "rb") as img_file:
-        encoded_string = base64.b64encode(img_file.read()).decode()
-    page_bg_css = f"""
-    <style>
-    .stApp {{
-        background-image: url("data:image/png;base64,{encoded_string}");
-        background-size: cover;
-        background-position: center;
-        background-attachment: fixed;
-        background-repeat: no-repeat;
-    }}
-    </style>
-    """
-    st.markdown(page_bg_css, unsafe_allow_html=True)
+# Display images in a row with arrows between them
+st.markdown("<h3 style='text-align: center;'>Process Flow</h3>", unsafe_allow_html=True)
 
-# Set background image
-BANNER_PATH = "your_background_image.png"
-set_background(BANNER_PATH)
+col1, col2, col3, col4, col5 = st.columns([1, 0.2, 1, 0.2, 1])
 
-# Initialize session state for conversation if not present
-if "conversation" not in st.session_state:
-    st.session_state["conversation"] = []
-
-# Sidebar for conversation history
-with st.sidebar:
-    st.header("Conversation History")
-    for i, (speaker, message) in enumerate(st.session_state["conversation"]):
-        with st.expander(f"{speaker}: {message[:30]}..."):
-            st.write(message)
-
-# Main Chatbot Interface
-st.title("Chatbot Interface")
-
-# Embedding function
-embedding_function = TitanEmbeddingFunction(model_id="amazon.titan-embed-text:v2.0")
-
-# Chat input using st.chat_input
-user_query = st.chat_input("Ask your question...")
-if user_query:
-    with st.spinner("Generating response..."):
-        # Generate response using predefined function
-        model_id = "anthropic.claude-3-5-sonnet-20240620-v1:0"
-        response = query_chromadb_and_generate_response(
-            user_query, embedding_function, st.session_state.collection, model_id
-        )
-        
-        # Store conversation history
-        st.session_state["conversation"].append(("User", user_query))
-        st.session_state["conversation"].append(("Bot", response))
-
-    # Display conversation using st.chat_message with improved formatting
-    with st.chat_message("user"):
-        st.markdown(f"**User:** {user_query}")
-    with st.chat_message("assistant"):
-        st.markdown("**Bot Response:**")
-        st.markdown(response.replace("\n", "  \n"))  # Preserve newlines
-
-# Clear cache button
-if st.button("Clear Cache", use_container_width=True):
-    st.session_state["conversation"].clear()
-    st.success("Cache Cleared")
+with col1:
+    st.image(image1, caption="Step 1", use_column_width=True)
+with col2:
+    st.markdown("<h1 style='text-align: center;'>➡️</h1>", unsafe_allow_html=True)
+with col3:
+    st.image(image2, caption="Step 2", use_column_width=True)
+with col4:
+    st.markdown("<h1 style='text-align: center;'>➡️</h1>", unsafe_allow_html=True)
+with col5:
+    st.image(image3, caption="Step 3", use_column_width=True)
