@@ -14,7 +14,7 @@ col1, col2, col3, col4, col5 = st.columns([1, 0.2, 1, 0.2, 1])
 with col1:
     st.image(image1, caption="Step 1", use_column_width=True)
 with col2:
-    st.markdown("<h1 style='text-align: center;'>➡️</h1>", unsafe_allow_html=True)  # Forward arrow
+    st.markdown("<h1 style='text-align: center;'>➡↔️</h1>", unsafe_allow_html=True)  # Forward arrow
 with col3:
     st.image(image2, caption="Step 2", use_column_width=True)
 with col4:
