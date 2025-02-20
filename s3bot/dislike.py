@@ -12,51 +12,50 @@ from langchain.text_splitter import RecursiveCharacterTextSplitter
 # AWS Bedrock client
 brt = boto3.client(service_name="bedrock-runtime", region_name="us-east-1")
 PDF_PATH = "./s3-api.pdf"
-LOGO_PATH = "./logo.png"
-BANNER_PATH = "./chatbot.png"
-LIKED_RESPONSES_FILE = "liked_responses.txt"
 
-def save_liked_response(response):
-    """Saves the liked response to a text file."""
-    with open(LIKED_RESPONSES_FILE, "a") as file:
-        file.write(response + "\n" + "-" * 50 + "\n")
+LOGO_PATH = "./logo.png"  # Update with your logo filename
+BANNER_PATH = "./chatbot.png"  # Update with your banner filename
 
-def regenerate_response_with_improvements(user_query, model_id, region="us-east-1"):
-    """Generates a refined response based on user feedback."""
-    client = boto3.client("bedrock-runtime", region_name=region)
-    additional_instructions = (
-        "Carefully refine the response to be more precise, logical, and informative.\n"
-        "Ensure technical depth and clarity suitable for an expert audience.\n"
-        "Improve structuring to include step-by-step guidance, actionable insights, and advanced explanations where applicable."
-    )
-    full_prompt = f"User Query: {user_query}\n\n{additional_instructions}\n\nAnswer:"
-    
-    try:
-        response = client.invoke_model(
-            modelId=model_id,
-            body=json.dumps({
-                "anthropic_version": "bedrock-2023-05-31",
-                "messages": [{
-                    "role": "user",
-                    "content": [{
-                        "type": "text",
-                        "text": full_prompt
-                    }]
-                }],
-                "max_tokens": 4096,
-                "temperature": 0.7,
-                "top_p": 0.9
-            }),
-            contentType="application/json",
-            accept="application/json"
-        )
-        response_body = json.loads(response["body"].read().decode("utf-8"))
-        return "".join(item.get("text", "") for item in response_body["content"]).strip()
-    except Exception as e:
-        return f"Error generating response: {e}"
+base_url = "https://confluence.org.com"
+username = "gbudfa"
+password = "$2025"
+parent_page_ids = [1524851522, 1588779324]
+
+# Set your JIRA credentials and base URL
+JIRA_URL = "https://jira.org.com"
+USERNAME = "gbudfa"
+API_TOKEN = "$2025"  # Use API token for authentication
+PROJECT_KEY = "PANTHER"  # Replace with your Jira project key
+
+# Initialize Jira Connection
+jira = Jira(
+    url=JIRA_URL,
+    username=USERNAME,
+    password=API_TOKEN,
+    verify_ssl=False
+)
+
+# Initialize Confluence instance
+confluence = Confluence(
+    url=base_url,
+    username=username,
+    password=password,
+    verify_ssl=False
+)
 
 # Streamlit Interface Configuration
 st.set_page_config(page_title="Ask SRE Infra Assist", page_icon="🛠️", layout="wide")
+
+# Initialize ChromaDB Collection
+if "collection" not in st.session_state:
+    with st.spinner("Loading FannieAstra..."):
+        embedding_function = TitanEmbeddingFunction(model_id="amazon.titan-embed-text-v2:0")
+        client = chromadb.PersistentClient(path="./knowledge_base")
+        collection = client.get_or_create_collection(name="my_collection", embedding_function=embedding_function)
+        st.session_state.collection = store_all_pdfs_in_chromadb(PDF_PATH, embedding_function)
+
+# Chatbot Section
+embedding_function = TitanEmbeddingFunction(model_id="amazon.titan-embed-text-v2:0")
 
 st.header("Chatbot Interface")
 
@@ -65,24 +64,49 @@ with st.form(key="question_form", clear_on_submit=False):
     submit_button = st.form_submit_button("Submit")
 
 if submit_button and user_query:
+    if "conversation" not in st.session_state:
+        st.session_state["conversation"] = []
+
     with st.spinner("Generating response..."):
         model_id = "anthropic.claude-3-5-sonnet-20240620-v1:0"
-        response = regenerate_response_with_improvements(user_query, model_id)
-        st.session_state["latest_response"] = response
-        st.text_area("Chatbot Response:", response, height=300)
+        response, confluence_links, other_pdf_sources = query_chromadb_and_generate_response(
+            user_query,
+            TitanEmbeddingFunction(model_id="amazon.titan-embed-text-v2:0"),
+            st.session_state.collection,
+            model_id,
+        )
 
-    col1, col2 = st.columns([0.2, 0.2])
-    with col1:
-        if st.button("👍 Like", key="like_button"):
-            save_liked_response(st.session_state["latest_response"])
-            st.success("Response saved to liked responses!")
-    with col2:
-        if st.button("👎 Dislike", key="dislike_button"):
-            with st.spinner("Refining response..."):
-                refined_response = regenerate_response_with_improvements(user_query, model_id)
-                st.session_state["latest_response"] = refined_response
-                st.text_area("Refined Response:", refined_response, height=300)
+        references = get_references_from_pdf(user_query, st.session_state.collection, embedding_function)
+        reference_section = "\n\n References:\n"
+        if confluence_links:
+            reference_section += "🔗 Confluence Sources:\n" + "\n".join(confluence_links) + "\n"
+        if other_pdf_sources:
+            reference_section += "📄 Other PDF Sources:\n" + "\n".join(other_pdf_sources) + "\n"
+
+        final_response = f"{response}{reference_section}"
+        st.session_state["conversation"].append((user_query, final_response))
+        st.text_area("Chatbot Response:", final_response, height=600)
+
+        # Like/Dislike buttons
+        col1, col2 = st.columns([1, 1])
+        with col1:
+            if st.button("👍 Like"):
+                st.success("Glad you liked it.")
+        with col2:
+            if st.button("👎 Dislike"):
+                with st.spinner("Regenerating response..."):
+                    improved_response = regenerate_answer_with_bedrock(user_query, model_id)
+                    improved_final_response = f"{improved_response}{reference_section}"
+                    st.session_state["conversation"].append((user_query, improved_final_response))
+                    st.text_area("Updated Chatbot Response:", improved_final_response, height=600)
 
 if st.button("Clear Cache"):
     st.session_state.clear()
     st.success("Cache Cleared")
+
+with st.sidebar:
+    st.header("Conversation History")
+    if "conversation" in st.session_state:
+        for i, (speaker, message) in enumerate(st.session_state["conversation"]):
+            with st.expander(f"{speaker}: {message[:30]}..."):
+                st.write(f"{message}")
