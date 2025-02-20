@@ -46,8 +46,25 @@ confluence = Confluence(
 
 # Function to store liked responses
 def store_liked_response(response):
-    with open(LIKED_RESPONSES_FILE, "a") as file:
-        file.write(response + "\n\n")
+    try:
+        with open(LIKED_RESPONSES_FILE, "a") as file:
+            file.write(response + "\n\n")
+        st.success("Response saved as liked!")
+    except Exception as e:
+        st.error(f"Error saving liked response: {str(e)}")
+
+# Function to regenerate response on dislike
+def regenerate_response(user_query):
+    st.warning("Generating a better response...")
+    model_id = "anthropic.claude-3-5-sonnet-20240620-v1:0"
+    improved_response, _, _ = query_chromadb_and_generate_response(
+        user_query,
+        TitanEmbeddingFunction(model_id="amazon.titan-embed-text-v2:0"),
+        st.session_state.collection,
+        model_id,
+    )
+    st.session_state["conversation"].append((user_query, improved_response))
+    st.text_area("Improved Response:", improved_response, height=600)
 
 # Chatbot Section
 embedding_function = TitanEmbeddingFunction(model_id="amazon.titan-embed-text-v2:0")
@@ -85,15 +102,6 @@ if submit_button and user_query:
         with col1:
             if st.button("👍 Like"):
                 store_liked_response(final_response)
-                st.success("Response saved as liked!")
         with col2:
             if st.button("👎 Dislike"):
-                st.warning("Generating a better response...")
-                improved_response, _, _ = query_chromadb_and_generate_response(
-                    user_query,
-                    TitanEmbeddingFunction(model_id="amazon.titan-embed-text-v2:0"),
-                    st.session_state.collection,
-                    model_id,
-                )
-                st.session_state["conversation"].append((user_query, improved_response))
-                st.text_area("Improved Response:", improved_response, height=600)
+                regenerate_response(user_query)
