@@ -1,29 +1,29 @@
-import streamlit as st
+Sure, I can help with that! By default, Streamlit places the sidebar on the left side of the page. However, you can use some custom CSS to move it to the right side. Here's a step-by-step guide:
 
-# Sample images (replace with actual logo and chatbot UI image paths)
-logo = "https://via.placeholder.com/150"  # Replace with actual chatbot logo
-chatbot_image = "https://via.placeholder.com/150"  # Replace with actual chatbot UI image
+1. **Create a CSS file**: First, create a CSS file (e.g., `styles.css`) with the following content:
 
-# Title
-st.markdown("<h3 style='text-align: center;'>Chatbot Flow</h3>", unsafe_allow_html=True)
+    ```css
+    .css-1lcbmhc {
+        order: 2; /* Move the sidebar to the right */
+    }
+    .css-1d391kg {
+        order: 1; /* Move the main content to the left */
+    }
+    ```
 
-# Creating columns for layout
-col1, col2, col3, col4 = st.columns([1.5, 1, 0.2, 1])
+2. **Load the CSS file in your Streamlit app**: Use the `st.markdown` function to load the CSS file in your Streamlit app. Add the following code to your Streamlit script:
 
-with col1:
-    st.markdown("<h2 style='text-align: left;'>Chatbot</h2>", unsafe_allow_html=True)
-    st.markdown(
-        "<p style='text-align: left; font-size: 16px;'>"
-        "An AI-powered chatbot that queries Jira and Confluence sources "
-        "to generate responses to user questions.</p>",
-        unsafe_allow_html=True,
-    )
+    ```python
+    import streamlit as st
 
-with col2:
-    st.image(logo, caption="Chatbot Logo", use_column_width=True)
+    # Load the CSS file
+    with open("styles.css") as f:
+        st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
 
-with col3:
-    st.markdown("<h1 style='text-align: center;'>↔️</h1>", unsafe_allow_html=True)  # Bidirectional arrow
+    # Your Streamlit app code
+    st.sidebar.title("Sidebar")
+    st.sidebar.write("This is the sidebar content.")
+    st.write("This is the main content.")
+    ```
 
-with col4:
-    st.image(chatbot_image, caption="User Interaction", use_column_width=True)
+This should move the sidebar to the right side of the page. Let me know if you need any further assistance!
