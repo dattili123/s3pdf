@@ -1,29 +1,39 @@
-Sure, I can help with that! By default, Streamlit places the sidebar on the left side of the page. However, you can use some custom CSS to move it to the right side. Here's a step-by-step guide:
+import streamlit as st
 
-1. **Create a CSS file**: First, create a CSS file (e.g., `styles.css`) with the following content:
+st.markdown("""
+    <style>
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background-color: #f8f9fa;
+            padding: 10px 20px;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            z-index: 1000;
+            box-shadow: 0px 4px 2px -2px gray;
+        }
+        .header img {
+            height: 50px;
+        }
+        .header h1 {
+            flex-grow: 1;
+            text-align: center;
+            margin: 0;
+            font-size: 24px;
+            color: #333;
+        }
+    </style>
+""", unsafe_allow_html=True)
 
-    ```css
-    .css-1lcbmhc {
-        order: 2; /* Move the sidebar to the right */
-    }
-    .css-1d391kg {
-        order: 1; /* Move the main content to the left */
-    }
-    ```
+st.markdown("""
+    <div class="header">
+        <img src="https://your-logo-url.com/logo.png" alt="Logo">
+        <h1>Your Title Here</h1>
+        <img src="https://your-right-image-url.com/pic.png" alt="Right Image">
+    </div>
+""", unsafe_allow_html=True)
 
-2. **Load the CSS file in your Streamlit app**: Use the `st.markdown` function to load the CSS file in your Streamlit app. Add the following code to your Streamlit script:
-
-    ```python
-    import streamlit as st
-
-    # Load the CSS file
-    with open("styles.css") as f:
-        st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
-
-    # Your Streamlit app code
-    st.sidebar.title("Sidebar")
-    st.sidebar.write("This is the sidebar content.")
-    st.write("This is the main content.")
-    ```
-
-This should move the sidebar to the right side of the page. Let me know if you need any further assistance!
+st.write("\n\n\n\n")  # To create space after fixed header
