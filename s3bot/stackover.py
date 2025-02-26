@@ -187,3 +187,81 @@ if __name__ == "__main__":
   If you're using AWS SageMaker, some security policies may block outgoing requests.
 
 Let me know if you need further debugging! 🚀
+
+
+You can test connectivity to the API using Python's `dns.resolver` module to check if the domain resolves correctly. This helps determine if there is a DNS issue.
+
+### **1. Check DNS Resolution**
+```python
+import dns.resolver
+
+domain = "fnma.stackenterprise.co"
+
+try:
+    result = dns.resolver.resolve(domain, 'A')  # Query A record (IPv4 address)
+    for ip in result:
+        print(f"{domain} resolves to {ip}")
+except dns.resolver.NXDOMAIN:
+    print(f"{domain} does not exist.")
+except dns.resolver.NoAnswer:
+    print(f"No answer for {domain}.")
+except dns.resolver.Timeout:
+    print(f"DNS query for {domain} timed out.")
+except Exception as e:
+    print(f"Error: {e}")
+```
+
+### **2. Test API Connectivity Using `socket`**
+If the domain resolves successfully, you can check whether the API is reachable via port 443 (HTTPS):
+```python
+import socket
+
+domain = "fnma.stackenterprise.co"
+port = 443
+
+try:
+    with socket.create_connection((domain, port), timeout=10) as sock:
+        print(f"Successfully connected to {domain} on port {port}")
+except socket.timeout:
+    print(f"Connection to {domain} on port {port} timed out.")
+except socket.gaierror:
+    print(f"Failed to resolve {domain}.")
+except Exception as e:
+    print(f"Connection error: {e}")
+```
+
+### **3. Perform an HTTP Request Using `requests`**
+If DNS and socket connectivity tests pass, check if the API responds:
+```python
+import requests
+
+url = "https://fnma.stackenterprise.co/api/2.3/questions?order=desc&sort=activity&site=fnma"
+headers = {"X-API-Key": "YOUR_API_KEY"}  # Use your actual API key
+
+try:
+    response = requests.get(url, headers=headers, timeout=10)
+    print(f"Response Status Code: {response.status_code}")
+    print("Response Headers:", response.headers)
+except requests.exceptions.Timeout:
+    print("Request timed out.")
+except requests.exceptions.ConnectionError:
+    print("Failed to connect to the API.")
+except requests.exceptions.RequestException as e:
+    print(f"Request error: {e}")
+```
+
+---
+
+### **Expected Outcomes**
+| Test | Expected Result | If Fails |
+|------|----------------|----------|
+| **DNS Resolution** (`dns.resolver`) | Returns IP address of the domain | "Domain does not exist" → Check DNS settings |
+| **Socket Test** (`socket.create_connection`) | "Successfully connected" | "Connection timed out" → Network issue (firewall, VPN, etc.) |
+| **HTTP Request** (`requests.get`) | Status code `200 OK` | Other status codes indicate API or authentication issues |
+
+#### **Next Steps Based on Output**
+- If **DNS fails**, check your **network settings**.
+- If **Socket fails**, **firewall or VPN** might be blocking access.
+- If **HTTP request fails**, **API key or permissions** might be incorrect.
+
+Run these tests and let me know what results you get! 🚀
