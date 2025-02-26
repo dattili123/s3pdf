@@ -92,6 +92,10 @@ def query_chromadb_and_generate_response(user_query, embedding_function, collect
         filtered_jira_links = filter_relevant_jira_links(user_query, extracted_jira_data, embedding_function)
         jira_links.extend(filtered_jira_links)
 
+    # Ensure other PDF sources are properly included
+    if not jira_links and other_pdf_sources:
+        print("No relevant Jira links found, but other PDF sources exist.")
+    
     relevant_text = " ".join(documents)
 
     full_prompt = f"Relevant Information:\n\nUser Query: {user_query}\n\n"
@@ -99,10 +103,14 @@ def query_chromadb_and_generate_response(user_query, embedding_function, collect
     if jira_links:
         full_prompt += f"Related Jira Issues: {', '.join(jira_links)}\n\n"
 
+    if other_pdf_sources:
+        full_prompt += f"Other Relevant PDF Sources: {', '.join(other_pdf_sources)}\n\n"
+
     full_prompt += "Answer:"
     
     response = generate_answer_with_bedrock(full_prompt, model_id, region)
     print(f"Confluence links: {confluence_links}")
     print(f"Jira links: {jira_links}")
+    print(f"Other PDF Sources: {other_pdf_sources}")
 
     return response, confluence_links, jira_links, other_pdf_sources
