@@ -98,7 +98,7 @@ def query_chromadb_and_generate_response(user_query, embedding_function, collect
     
     relevant_text = " ".join(documents)
 
-    full_prompt = f"Relevant Information:\n\nUser Query: {user_query}\n\n"
+    full_prompt = f"Relevant Information:\n\n{relevant_text}\n\nUser Query: {user_query}\n\n"
     
     if jira_links:
         full_prompt += f"Related Jira Issues: {', '.join(jira_links)}\n\n"
