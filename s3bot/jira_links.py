@@ -1,4 +1,5 @@
 import re
+import numpy as np
 from PyPDF2 import PdfReader
 
 JIRA_BASE_URL = "https://8443/browse/"  # Update this with your Jira base URL
@@ -6,9 +7,9 @@ JIRA_ISSUES_PDF_PATH = "./pdf_dir/jira_issues.pdf"  # Path to the Jira issues PD
 
 def extract_jira_keys_from_pdf(pdf_path, relevant_pages):
     """
-    Extract Jira issue keys only from the specified relevant pages of a PDF.
+    Extract Jira issue keys and corresponding text snippets only from relevant pages of a PDF.
     """
-    jira_keys = set()
+    jira_data = {}
 
     try:
         pdf_reader = PdfReader(pdf_path)
@@ -17,12 +18,38 @@ def extract_jira_keys_from_pdf(pdf_path, relevant_pages):
                 text = pdf_reader.pages[page_num].extract_text()
                 if text:
                     found_issues = re.findall(r'\b[A-Z]+-\d+\b', text)  # Matches Jira issue format (e.g., PANTHER-2462)
-                    jira_keys.update(found_issues)
+                    for issue in found_issues:
+                        if issue not in jira_data:
+                            jira_data[issue] = text  # Store the full text associated with the issue
 
     except Exception as e:
         print(f"Error reading Jira issues PDF: {str(e)}")
-    
-    return list(jira_keys)
+
+    return jira_data
+
+def cosine_similarity(vec1, vec2):
+    """Compute the cosine similarity between two vectors."""
+    return np.dot(vec1, vec2) / (np.linalg.norm(vec1) * np.linalg.norm(vec2))
+
+def filter_relevant_jira_links(user_query, jira_data, embedding_function):
+    """
+    Filter Jira links based on cosine similarity using AWS Titan Embeddings.
+    """
+    relevant_jira_links = []
+
+    # Generate embedding for user query
+    user_query_embedding = embedding_function([user_query])[0]
+
+    for issue, text in jira_data.items():
+        issue_text_embedding = embedding_function([text])[0]  # Get embedding for the Jira issue description
+        
+        # Compute similarity score
+        similarity_score = cosine_similarity(user_query_embedding, issue_text_embedding)
+        
+        if similarity_score > 0.5:  # Adjust threshold as needed
+            relevant_jira_links.append(f"{JIRA_BASE_URL}{issue}")
+
+    return relevant_jira_links
 
 def query_chromadb_and_generate_response(user_query, embedding_function, collection, model_id, region="us-east-1"):
     query_embedding = embedding_function([user_query])[0]
@@ -61,9 +88,9 @@ def query_chromadb_and_generate_response(user_query, embedding_function, collect
 
     # Extract Jira issue keys only from relevant pages
     if relevant_jira_pages:
-        extracted_jira_keys = extract_jira_keys_from_pdf(JIRA_ISSUES_PDF_PATH, relevant_jira_pages)
-        for issue in extracted_jira_keys:
-            jira_links.append(f"{JIRA_BASE_URL}{issue}")
+        extracted_jira_data = extract_jira_keys_from_pdf(JIRA_ISSUES_PDF_PATH, relevant_jira_pages)
+        filtered_jira_links = filter_relevant_jira_links(user_query, extracted_jira_data, embedding_function)
+        jira_links.extend(filtered_jira_links)
 
     relevant_text = " ".join(documents)
 
