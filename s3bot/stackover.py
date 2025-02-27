@@ -107,3 +107,30 @@ print("Fetched Questions:", questions)
 | **Python Test** | Prints questions | Handle API response errors |
 
 Run these steps and let me know what output you get! 🚀
+
+
+import requests
+
+# Constants
+API_BASE_URL = "https://fnma.stackenterprise.co/api/2.3"
+API_KEY = "YOUR_API_KEY"  # Replace with your actual API key
+
+def fetch_questions():
+    url = f"{API_BASE_URL}/questions?order=desc&sort=activity&site=fnma&key={API_KEY}"
+    try:
+        response = requests.get(url, timeout=10)  # Set timeout to avoid hanging requests
+        response.raise_for_status()  # Raises error for HTTP issues (403, 404, etc.)
+        
+        # Debugging: Print response status and first few questions
+        print(f"Response Status Code: {response.status_code}")
+        data = response.json()
+        print("First Question (Debug):", data.get("items", [])[0] if data.get("items") else "No questions found")
+        
+        return data.get("items", [])
+    except requests.exceptions.RequestException as e:
+        print(f"API Request Error: {e}")
+        return []
+
+# Fetch and display questions
+questions = fetch_questions()
+print(f"Fetched {len(questions)} questions.")
