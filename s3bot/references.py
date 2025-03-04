@@ -1,66 +1,70 @@
-import logging
+import numpy as np
+import re
+from sklearn.metrics.pairwise import cosine_similarity
 
-def query_chromadb_and_generate_response(user_query, embedding_function, collection, model_id, region="us-east-1", relevance_threshold=0.75):
-    """
-    Queries ChromaDB for the most relevant Jira references and generates a response.
-    Filters out irrelevant Jira issues based on a similarity threshold.
-    """
-    logging.info(f"🔍 Querying ChromaDB for: {user_query}")
-
-    query_embedding = embedding_function([user_query])[0]
-    results = collection.query(query_embedding, n_results=5)  # Retrieve top 5 results initially
-
+def query_chromadb_and_generate_response(user_query, embedding_function, collection, model_id, region="us-east-1"):
+    # Generate query embedding
+    query_embedding = embedding_function([user_query])
+    
+    # Query ChromaDB for relevant documents
+    results = collection.query(query_embedding, n_results=10, include=["documents", "metadatas", "embeddings"])  # Increase recall
+    
     if not results or "documents" not in results or not results["documents"]:
         return "No relevant data found in the database."
 
-    # Retrieve documents, metadata, and similarity scores
+    # Retrieve text chunks, metadata, and embeddings
     documents = [doc for sublist in results["documents"] for doc in sublist]
     metadata = results.get("metadatas", [])
-    distances = results.get("distances", [])
+    doc_embeddings = np.array(results.get("embeddings", []))  # Extract document embeddings
+    query_vector = np.array(query_embedding).reshape(1, -1)  # Ensure proper shape
 
-    logging.info(f"Retrieved {len(metadata[0])} potential Jira references.")
+    # Compute Cosine Similarity
+    similarity_scores = cosine_similarity(query_vector, doc_embeddings)[0]
+    ranked_indices = np.argsort(similarity_scores)[::-1]  # Rank by descending similarity
 
+    # Filter documents based on similarity threshold (0.75 recommended)
+    THRESHOLD = 0.75
+    ranked_documents = []
+    for idx in ranked_indices:
+        if similarity_scores[idx] >= THRESHOLD:
+            ranked_documents.append((documents[idx], similarity_scores[idx]))
+
+    # If no documents meet the threshold, fallback to top N results
+    if not ranked_documents:
+        ranked_documents = [(documents[idx], similarity_scores[idx]) for idx in ranked_indices[:5]]
+
+    # Extract most relevant text
+    relevant_text = "\n".join([doc[0] for doc in ranked_documents[:5]])  # Take top 5 ranked
+
+    # Process metadata for Confluence & Jira links
     confluence_links = []
-    relevant_jira_references = []  # Store only relevant JIRA links
+    jira_links = set()
     other_pdf_sources = set()
 
-    for i, meta in enumerate(metadata[0]):
-        similarity_score = 1 - distances[i]  # Convert distance to similarity
-
+    for idx in ranked_indices[:5]:  # Only process metadata for top-ranked documents
+        meta = metadata[idx]
         if isinstance(meta, dict):
             source = meta.get("source", "Unknown Source")
             page = meta.get("page", "Unknown Page")
-            
-            # Extract Jira ID (Expected format: PANTHER-XXXX)
-            jira_id = meta.get("source", "").strip()
-            jira_title = meta.get("title", "Unknown Title")
-            jira_link = f"https://jira.org.com/browse/{jira_id}"
 
-            if "PANTHER" in jira_id:  # Check if it's a Jira ticket
-                if similarity_score >= relevance_threshold:
-                    relevant_jira_references.append(f"[{jira_title}]({jira_link}) (Score: {similarity_score:.2f})")
-                    logging.info(f"✅ Adding relevant Jira: {jira_id} ({jira_title}) - Score: {similarity_score:.2f}")
-                else:
-                    logging.info(f"❌ Excluding Jira: {jira_id} ({jira_title}) - Score: {similarity_score:.2f}")
-
+            # Extract Page ID for Confluence links
+            match = re.search(r'(\d{5,})', source)
+            if match:
+                page_id = match.group(1)
+                confluence_links.append(f"{CONFLUENCE_BASE_URL}{page_id}")
             else:
-                match = re.match(r".*/(\d+)_.*\.pdf", source)  # Extract Confluence Page ID
-                if match:
-                    page_id = match.group(1)
-                    confluence_links.append(f"https://confluence.url/{page_id}")
-                else:
-                    other_pdf_sources.add(f"File: {source} Page: {page}")
+                other_pdf_sources.add(source.lower())
 
-    # Ensure only relevant Jiras are included in the response
-    jira_references_section = "\n\n🔗 Relevant Jira References:\n" + "\n".join(relevant_jira_references) if relevant_jira_references else "\n\n⚠️ No highly relevant Jira references found."
+            # Extract Jira Ticket Keys (e.g., "PROJ-1234")
+            jira_match = re.findall(r"[A-Z]+-\d+", source)
+            if jira_match:
+                jira_links.update(jira_match)
 
-    # Generate Bedrock response
-    relevant_text = " ".join(documents)
-    full_prompt = f"Relevant Information:\n\nUser Query: {user_query}\n\nAnswer:"
-    response = generate_answer_with_bedrock(full_prompt, model_id, region)
+    # Generate response using Amazon Bedrock
+    full_prompt = f"User Query: {user_query}\n\nContext:\n{relevant_text}\n\nAnswer:"
+    response = response_regeneration_function(full_prompt, model_id, region)
 
-    # Append Jira references to the final response
-    final_response = f"{response}{jira_references_section}"
-    logging.info("✅ Final Response Generated.")
+    print(f"Final Jira Links: {jira_links}")
+    print(f"Final Confluence Links: {confluence_links}")
 
-    return final_response, confluence_links, other_pdf_sources
+    return response, confluence_links, other_pdf_sources, list(jira_links)
