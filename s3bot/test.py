@@ -47,10 +47,5 @@ def get_specific_jira_issue(issue_key):
 
     return issue_data
 
-
-
-issue_keys = []
-
-issues_data = get_specific_jira_issues(issue_keys)
-for issue in issues_data:
-    print(issue)
+issue_details = get_specific_jira_issue("PANTHER-2232")
+print(issue_details)
