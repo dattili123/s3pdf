@@ -1,31 +1,26 @@
-# Generate query embedding
-query_embedding = embedding_function([user_query])
+confluence_links = []
+jira_links = set()
+other_pdf_sources = set()
 
-# Ensure query_embedding is a 2D array
-query_embedding = np.array(query_embedding)
-print(f"Query Embedding Shape Before Reshape: {query_embedding.shape}")
+for idx in ranked_indices[:5]:  # Only process metadata for top-ranked documents
+    if idx >= len(metadata):  # SAFETY CHECK: Skip if metadata index is out of range
+        print(f"Skipping index {idx} as it's out of range for metadata")
+        continue
 
-if query_embedding.ndim == 3:  # Fix case where it's (1, 1, embedding_dim)
-    query_embedding = query_embedding.squeeze(axis=1)  # Remove extra dimension
+    meta = metadata[idx]
+    if isinstance(meta, dict):
+        source = meta.get("source", "Unknown Source")
+        page = meta.get("page", "Unknown Page")
 
-query_vector = query_embedding.reshape(1, -1)
-print(f"Query Vector Shape After Reshape: {query_vector.shape}")
+        # Extract Page ID for Confluence links
+        match = re.search(r'(\d{5,})', source)
+        if match:
+            page_id = match.group(1)
+            confluence_links.append(f"{CONFLUENCE_BASE_URL}{page_id}")
+        else:
+            other_pdf_sources.add(source.lower())
 
-# Query ChromaDB for relevant documents
-results = collection.query(query_vector, n_results=10, include=["documents", "metadatas", "embeddings"])
-
-if not results or "documents" not in results or not results["documents"]:
-    return "No relevant data found in the database."
-
-# Retrieve document embeddings
-doc_embeddings = np.array(results.get("embeddings", []))
-print(f"Document Embeddings Shape Before Reshape: {doc_embeddings.shape}")
-
-# Ensure document embeddings are properly shaped
-if doc_embeddings.ndim == 3:
-    doc_embeddings = doc_embeddings.squeeze(axis=1)  # Remove extra dimension
-
-print(f"Document Embeddings Shape After Reshape: {doc_embeddings.shape}")
-
-# Compute Cosine Similarity
-similarity_scores = cosine_similarity(query_vector, doc_embeddings)[0]
+        # Extract Jira Ticket Keys (e.g., "PROJ-1234")
+        jira_match = re.findall(r"[A-Z]+-\d+", source)
+        if jira_match:
+            jira_links.update(jira_match)
